@@ -1,6 +1,7 @@
 //! The operators that ship with Prism.
 
 pub mod extrude;
+pub mod inset;
 pub mod io;
 pub mod mesh;
 pub mod object;
@@ -17,6 +18,7 @@ pub fn register_all(r: &mut Registry) {
     object::register(r);
     mesh::register(r);
     extrude::register(r);
+    inset::register(r);
     transform::register(r);
     view3d::register(r);
 }

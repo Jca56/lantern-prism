@@ -198,6 +198,7 @@ impl ContextMenu {
                 // rarer dissolve / normals actions in its Mesh Tools section.
                 let edit: Vec<Item> = vec![
                     act("Extrude", "mesh.extrude", vec![]),
+                    act("Inset", "mesh.inset", vec![]),
                     act("Subdivide", "mesh.subdivide", vec![]),
                     act("Merge by Distance", "mesh.merge_by_distance", vec![]),
                     Item::Separator,
@@ -278,7 +279,7 @@ mod tests {
         assert_eq!(el.tools[3].icon, Icon::Vertex);
         assert!(el.tools[3].active, "vertex mode is the scene default");
         assert!(!el.tabs[0].items.iter().any(|i| matches!(i, Item::OpPanel { .. })), "knobs live in the Properties editor");
-        for op in ["mesh.extrude", "mesh.subdivide", "mesh.merge_by_distance"] {
+        for op in ["mesh.extrude", "mesh.inset", "mesh.subdivide", "mesh.merge_by_distance"] {
             assert!(el.tabs[0].items.iter().any(|i| matches!(i, Item::Action { op: o, .. } if o == op)), "{op} is a plain action");
         }
         for gone in ["mesh.dissolve", "mesh.flip_normals", "mesh.normals_make_consistent", "object.mode_set"] {

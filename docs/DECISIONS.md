@@ -403,6 +403,21 @@ the next format when it is needed.
 in to exercise picking and transforms at scale. OBJ is the smallest format
 every other tool speaks.
 
+## D027 — Inset is extrude-in-place plus an even-offset rim
+**Status:** Accepted (implemented 2026-09-02; Phase 7 slice 2)
+**Decision:** `Mesh::inset_faces` extrudes the region in place, then moves
+every rim vertex along the bisector of its two rim edges, scaled by the
+inverse cosine of the corner's half angle (clamped) so the rim stays an even
+width round corners; interior vertices only take `depth`. A closed shell
+has no rim, so it — like the `individual` option — insets each face alone.
+`mesh.inset` is a modal operator of the extrude family: thickness follows
+the distance the pointer has moved from where it started (any direction),
+click confirms, Esc cancels, and thickness / depth / individual are in
+Adjust Last Operation.
+**Why:** Inset and extrude are the two verbs that turn a box into a model.
+Reusing the region extrude means one boundary walk and one attribute-copy
+path to keep correct.
+
 ---
 
 ## Open questions

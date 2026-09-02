@@ -5,7 +5,9 @@
 mod delete;
 mod dissolve;
 mod extrude;
+mod inset;
 mod normals;
 mod weld;
 
 pub use extrude::ExtrudeResult;
+pub use inset::{InsetResult, InsetVert};
