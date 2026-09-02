@@ -26,6 +26,8 @@ enum Node {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Area {
     pub editor: EditorKind,
+    /// Camera and display settings when this area is a 3D viewport.
+    pub viewport: prism_viewport::ViewportState,
 }
 
 /// Where an area landed this frame.
@@ -68,7 +70,7 @@ impl Screen {
     pub fn new(editor: EditorKind) -> Self {
         Self {
             nodes: vec![Some(Node::Leaf(0))],
-            areas: vec![Some(Area { editor })],
+            areas: vec![Some(Area { editor, viewport: Default::default() })],
             root: 0,
             active: Some(0),
             layouts: Vec::new(),
@@ -121,7 +123,7 @@ impl Screen {
     /// of the space; the new area (with `editor`) takes the rest.
     pub fn split(&mut self, area: AreaId, axis: Axis, ratio: f64, editor: EditorKind) -> Option<AreaId> {
         let leaf = self.leaf_of(area)?;
-        let new_area = self.alloc_area(Area { editor });
+        let new_area = self.alloc_area(Area { editor, viewport: Default::default() });
         let first = self.alloc_node(Node::Leaf(area));
         let second = self.alloc_node(Node::Leaf(new_area));
         self.nodes[leaf] = Some(Node::Split { axis, ratio: ratio.clamp(0.1, 0.9), children: [first, second] });

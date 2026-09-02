@@ -10,8 +10,9 @@ use prism_ops::{Ctx, Executor, KeyConfig, UiRequest};
 use prism_props::Value;
 use prism_render::DrawList;
 use prism_text::TextEngine;
+use prism_viewport::{PickRequest, PickResult, ViewportRequest};
 
-use crate::editors::{EditorCtx, EditorKind, GalleryState, OutlinerState, Prefs, PropertiesState, draw_editor};
+use crate::editors::{EditorCtx, EditorKind, GalleryState, OutlinerState, Prefs, PropertiesState, draw_editor, draw_editor_header};
 use crate::event::Event;
 use crate::id::WidgetId;
 use crate::popups::{self, Popup};
@@ -22,7 +23,7 @@ use crate::titlebar::WindowCommand;
 use crate::ui::Ui;
 
 /// What the app needs to know after a rebuild.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ShellOutput {
     pub cursor: CursorIcon,
     /// Run another rebuild immediately (a popup closed, a value committed).
@@ -32,6 +33,10 @@ pub struct ShellOutput {
     /// Something the title bar asked the window system to do.
     pub window_command: Option<WindowCommand>,
     pub quit: bool,
+    /// 3D viewports to render this frame, in draw order.
+    pub viewports: Vec<ViewportRequest>,
+    /// Clicks to resolve with the renderer, then feed to `apply_pick`.
+    pub picks: Vec<PickRequest>,
 }
 
 /// Facts about the window the shell cannot know on its own.
@@ -129,6 +134,8 @@ impl Shell {
         let m = self.metrics(window_scale);
         self.state.begin_frame(events, m.widget_h);
         let mut requests: Vec<UiRequest> = Vec::new();
+        let mut viewports: Vec<ViewportRequest> = Vec::new();
+        let mut picks: Vec<PickRequest> = Vec::new();
         let pointer = self.state.pointer;
 
         // A running modal operator sees every event first.
@@ -231,7 +238,9 @@ impl Shell {
             draw.rect_gradient(l.header, theme.top(theme.header), theme.bottom(theme.header));
             draw.hline(l.header.min.x, l.header.max.x, l.header.min.y, m.border, theme.highlight(theme.header));
             draw.hline(l.header.min.x, l.header.max.x, l.header.max.y - m.border, m.border, theme.border_dark);
-            draw.rect(l.body, theme.panel);
+            if kind != EditorKind::Viewport {
+                draw.rect(l.body, theme.panel); // a viewport body is painted by the 3D pass
+            }
             draw.stroke_rect(l.rect, m.border, 0.0, theme.border_dark);
             draw.pop_clip();
 
@@ -239,6 +248,7 @@ impl Shell {
                 Vec2::new(l.header.min.x + m.gap, l.header.min.y + ((l.header.height() - m.widget_h) * 0.5).round()),
                 Vec2::new(l.header.max.x - m.gap, l.header.max.y),
             );
+            let area_vp = &mut self.screen.area_mut(l.area).expect("live area").viewport;
             let mut ui = Ui::new(draw, text, &theme, m, &mut self.state, content, l.header, base.with("header"), 0);
             ui.set_window_rect(window);
             ui.row(|ui| {
@@ -246,6 +256,23 @@ impl Shell {
                 let mut idx = kind.index();
                 if ui.dropdown("editor", &mut idx, &labels) {
                     actions.push(Action::SetEditor(l.area, EditorKind::ALL[idx]));
+                }
+                {
+                    let mut ctx = EditorCtx {
+                        doc,
+                        exec,
+                        prefs: &mut self.prefs,
+                        gallery: &mut self.gallery,
+                        outliner: &mut self.outliner,
+                        properties: &mut self.properties,
+                        requests: &mut requests,
+                        pointer,
+                        area: l.area,
+                        viewport: area_vp,
+                        viewports: &mut viewports,
+                        picks: &mut picks,
+                    };
+                    draw_editor_header(kind, ui, &mut ctx);
                 }
                 let style = ui.text_style();
                 let menu_w = ui.measure("⋮", &style) + ui.m.pad * 2.0;
@@ -273,6 +300,10 @@ impl Shell {
                 properties: &mut self.properties,
                 requests: &mut requests,
                 pointer,
+                area: l.area,
+                viewport: area_vp,
+                viewports: &mut viewports,
+                picks: &mut picks,
             };
             changed_globals |= draw_editor(kind, &mut ui, &mut ctx);
             ui.finish();
@@ -326,6 +357,19 @@ impl Shell {
                     self.popup = Some(Popup::Path { op, save, text });
                 }
                 UiRequest::Quit => quit = true,
+                UiRequest::ViewFrame { selected } => {
+                    let bounds = prism_viewport::scene_bounds(doc, selected);
+                    let target = self
+                        .screen
+                        .active
+                        .filter(|&a| self.screen.area(a).is_some_and(|ar| ar.editor == EditorKind::Viewport))
+                        .or_else(|| layouts.iter().map(|l| l.area).find(|&a| self.screen.area(a).is_some_and(|ar| ar.editor == EditorKind::Viewport)));
+                    if let Some(a) = target
+                        && let Some(area) = self.screen.area_mut(a)
+                    {
+                        area.viewport.camera.frame(&bounds);
+                    }
+                }
                 UiRequest::Undo | UiRequest::Redo | UiRequest::HistoryClear => {}
             }
             self.state.request_rebuild = true;
@@ -354,6 +398,29 @@ impl Shell {
 
         self.state.end_frame();
         let cursor = if edge_cursor != CursorIcon::Default { edge_cursor } else { sep_cursor.unwrap_or(self.state.cursor_icon) };
-        ShellOutput { cursor, rebuild_again: self.state.request_rebuild, clear: theme.bg, window_command, quit }
+        ShellOutput { cursor, rebuild_again: self.state.request_rebuild, clear: theme.bg, window_command, quit, viewports, picks }
+    }
+
+    /// Turn a resolved pick into a selection operator.
+    pub fn apply_pick(&mut self, doc: &mut Doc, exec: &mut Executor, req: &PickRequest, result: PickResult) {
+        let mut requests = Vec::new();
+        let ov = |extra: Vec<(String, Value)>| -> Vec<(String, Value)> {
+            let mut v = vec![("extend".to_owned(), Value::Bool(req.extend)), ("toggle".to_owned(), Value::Bool(req.toggle))];
+            v.extend(extra);
+            v
+        };
+        match result {
+            PickResult::Nothing => {
+                if !req.extend && !req.toggle {
+                    let op = if req.mode == prism_viewport::PickMode::Object { "object.select_all" } else { "mesh.select_all" };
+                    run_op(doc, exec, req.pos, op, &[("action".to_owned(), Value::Enum(2))], &mut requests);
+                }
+            }
+            PickResult::Object(id) => run_op(doc, exec, req.pos, "object.select", &ov(vec![("id".to_owned(), Value::Id(id))]), &mut requests),
+            PickResult::Vert(_, v) => run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(0)), ("handle".to_owned(), Value::I64(v.to_raw() as i64))]), &mut requests),
+            PickResult::Edge(_, e) => run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(1)), ("handle".to_owned(), Value::I64(e.to_raw() as i64))]), &mut requests),
+            PickResult::Face(_, f) => run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(2)), ("handle".to_owned(), Value::I64(f.to_raw() as i64))]), &mut requests),
+        }
+        self.state.request_rebuild = true;
     }
 }

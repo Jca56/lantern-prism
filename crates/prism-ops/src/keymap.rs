@@ -140,6 +140,8 @@ impl KeyConfig {
         k.bind(CTX_WINDOW, KeyItem::new(Trigger::key(Char('q'), ctrl), "wm.quit"));
         k.bind(CTX_WINDOW, KeyItem::new(Trigger::key(F(3), none), "wm.palette"));
         k.bind(CTX_WINDOW, KeyItem::new(Trigger::key(Space, ctrl), "wm.palette"));
+        k.bind(CTX_WINDOW, KeyItem::new(Trigger::key(Home, none), "view3d.frame_all"));
+        k.bind(CTX_WINDOW, KeyItem::new(Trigger::key(Char('.'), none), "view3d.frame_selected"));
         // Object mode.
         k.bind(CTX_OBJECT, KeyItem::new(Trigger::key(Char('a'), shift), "wm.call_menu").with("menu", Value::Str("add".into())));
         k.bind(CTX_OBJECT, KeyItem::new(Trigger::key(Char('x'), none), "object.delete"));
@@ -156,6 +158,9 @@ impl KeyConfig {
         k.bind(CTX_MESH, KeyItem::new(Trigger::key(Char('x'), none), "wm.call_menu").with("menu", Value::Str("mesh_delete".into())));
         k.bind(CTX_MESH, KeyItem::new(Trigger::key(Delete, none), "mesh.delete").with("kind", Value::Enum(2)));
         k.bind(CTX_MESH, KeyItem::new(Trigger::key(Char('m'), none), "mesh.merge_by_distance"));
+        k.bind(CTX_MESH, KeyItem::new(Trigger::key(Char('1'), none), "mesh.select_mode").with("mode", Value::Enum(0)));
+        k.bind(CTX_MESH, KeyItem::new(Trigger::key(Char('2'), none), "mesh.select_mode").with("mode", Value::Enum(1)));
+        k.bind(CTX_MESH, KeyItem::new(Trigger::key(Char('3'), none), "mesh.select_mode").with("mode", Value::Enum(2)));
         k.bind(CTX_MESH, KeyItem::new(Trigger::key(Char('n'), shift), "mesh.normals_make_consistent"));
         k
     }

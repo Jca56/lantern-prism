@@ -18,6 +18,10 @@ pub struct MeshBuffers {
     pub tri_indices: Vec<u32>,
     pub tri_to_face: Vec<FaceH>,
     pub corner_to_loop: Vec<LoopH>,
+    /// Compact live faces, in face order; `corner_face` indexes this.
+    pub face_handles: Vec<FaceH>,
+    /// Compact face index per corner (flat shading data and pick ids).
+    pub corner_face: Vec<u32>,
     /// Compact live vertices, for wireframe and vertex overlays.
     pub vert_positions: Vec<Vec3>,
     pub vert_to_vert: Vec<VertH>,
@@ -73,8 +77,11 @@ pub fn evaluate(mesh: &Mesh) -> MeshBuffers {
     let mut positions: Vec<Vec3> = Vec::new();
     for f in mesh.faces() {
         let base = out.corner_positions.len() as u32;
+        let face_index = out.face_handles.len() as u32;
+        out.face_handles.push(f);
         positions.clear();
         for l in mesh.loops_of_face(f) {
+            out.corner_face.push(face_index);
             let v = mesh.loop_vert(l);
             let p = mesh.position(v);
             positions.push(p);
@@ -155,6 +162,9 @@ mod tests {
         assert_eq!(b.corner_positions.len(), 24);
         assert_eq!(b.tri_count(), 12);
         assert_eq!(b.tri_to_face.len(), 12);
+        assert_eq!(b.face_handles.len(), 6);
+        assert_eq!(b.corner_face.len(), 24);
+        assert_eq!(b.corner_face[23], 5);
         assert!(b.loose_verts.is_empty());
         assert!(b.corner_uvs.is_empty());
         assert_eq!(b.bounds, Aabb::new(Vec3::splat(-1.0), Vec3::splat(1.0)));

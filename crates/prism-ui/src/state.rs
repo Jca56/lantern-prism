@@ -67,6 +67,9 @@ pub struct UiState {
     pub released: bool,
     pub press_pos: Vec2,
     pub right_pressed: bool,
+    pub middle_down: bool,
+    pub middle_pressed: bool,
+    pub middle_press_pos: Vec2,
     pub double_click: bool,
     /// Some widget took this frame's press. Unclaimed presses clear focus.
     pub press_claimed: bool,
@@ -116,6 +119,9 @@ impl UiState {
             released: false,
             press_pos: Vec2::ZERO,
             right_pressed: false,
+            middle_down: false,
+            middle_pressed: false,
+            middle_press_pos: Vec2::ZERO,
             double_click: false,
             press_claimed: false,
             delta: Vec2::ZERO,
@@ -141,6 +147,7 @@ impl UiState {
         self.pressed = false;
         self.released = false;
         self.right_pressed = false;
+        self.middle_pressed = false;
         self.double_click = false;
         self.press_claimed = false;
         self.wheel = Vec2::ZERO;
@@ -173,6 +180,13 @@ impl UiState {
                     self.released = true;
                 }
                 Event::Button { button: MouseButton::Right, pressed: true, .. } => self.right_pressed = true,
+                Event::Button { button: MouseButton::Middle, pressed, pos, .. } => {
+                    self.middle_down = *pressed;
+                    if *pressed {
+                        self.middle_pressed = true;
+                        self.middle_press_pos = *pos;
+                    }
+                }
                 Event::Wheel { delta, .. } => self.wheel += delta.to_pixels(line_px),
                 Event::Modifiers(m) => self.mods = *m,
                 Event::Key { key, pressed: true, repeat, mods } => {
@@ -181,6 +195,7 @@ impl UiState {
                 Event::Text(t) => self.text_input.push_str(t),
                 Event::Focus(false) => {
                     self.down = false;
+                    self.middle_down = false;
                     self.active = None;
                 }
                 _ => {}

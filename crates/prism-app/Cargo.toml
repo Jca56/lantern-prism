@@ -18,6 +18,7 @@ prism-core.workspace = true
 prism-math.workspace = true
 prism-doc.workspace = true
 prism-ops.workspace = true
+prism-viewport.workspace = true
 prism-text.workspace = true
 prism-render.workspace = true
 prism-ui.workspace = true

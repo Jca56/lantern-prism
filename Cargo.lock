@@ -1278,6 +1278,7 @@ dependencies = [
  "prism-render",
  "prism-text",
  "prism-ui",
+ "prism-viewport",
  "winit",
 ]
 
@@ -1374,6 +1375,21 @@ dependencies = [
  "prism-props",
  "prism-render",
  "prism-text",
+ "prism-viewport",
+]
+
+[[package]]
+name = "prism-viewport"
+version = "0.1.0"
+dependencies = [
+ "prism-core",
+ "prism-doc",
+ "prism-eval",
+ "prism-geom",
+ "prism-math",
+ "prism-mesh",
+ "prism-render",
+ "wgpu",
 ]
 
 [[package]]

@@ -105,6 +105,11 @@ impl AttrData {
         each_data!(self, v => v.len())
     }
 
+    /// Storage version of the layer (see `ChunkedVec::version`).
+    pub fn version(&self) -> u64 {
+        each_data!(self, v => v.version())
+    }
+
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

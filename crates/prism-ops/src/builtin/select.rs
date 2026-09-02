@@ -104,3 +104,60 @@ pub fn select_verts(m: &mut Mesh, verts: &[VertH], on: bool) {
 fn m_live(v: VertH, len: usize) -> bool {
     v.idx() < len
 }
+
+/// Make the three domains agree, treating `mode`'s domain as primary.
+pub fn flush_mode(m: &mut Mesh, mode: prism_doc::SelectMode) {
+    match mode {
+        prism_doc::SelectMode::Vertex => flush(m),
+        prism_doc::SelectMode::Edge => {
+            let edges = selected_edges(m);
+            let verts: Vec<VertH> = m.verts().collect();
+            let vs = m.vert_attrs_mut().bools_mut(V_SELECT);
+            for v in verts {
+                vs.set(v.idx(), false);
+            }
+            for &e in &edges {
+                let [a, b] = m.edge_verts(e);
+                let vs = m.vert_attrs_mut().bools_mut(V_SELECT);
+                vs.set(a.idx(), true);
+                vs.set(b.idx(), true);
+            }
+            let faces: Vec<(FaceH, bool)> = m
+                .faces()
+                .map(|f| {
+                    let es = m.edge_attrs().bools(E_SELECT);
+                    (f, m.edges_of_face(f).all(|e| es[e.idx()]))
+                })
+                .collect();
+            let fs = m.face_attrs_mut().bools_mut(F_SELECT);
+            for (f, on) in faces {
+                fs.set(f.idx(), on);
+            }
+        }
+        prism_doc::SelectMode::Face => {
+            let faces = selected_faces(m);
+            let verts: Vec<VertH> = m.verts().collect();
+            let edges: Vec<EdgeH> = m.edges().collect();
+            let vs = m.vert_attrs_mut().bools_mut(V_SELECT);
+            for v in verts {
+                vs.set(v.idx(), false);
+            }
+            let es = m.edge_attrs_mut().bools_mut(E_SELECT);
+            for e in edges {
+                es.set(e.idx(), false);
+            }
+            for &f in &faces {
+                let vs_of: Vec<VertH> = m.verts_of_face(f).collect();
+                let es_of: Vec<EdgeH> = m.edges_of_face(f).collect();
+                let vs = m.vert_attrs_mut().bools_mut(V_SELECT);
+                for v in vs_of {
+                    vs.set(v.idx(), true);
+                }
+                let es = m.edge_attrs_mut().bools_mut(E_SELECT);
+                for e in es_of {
+                    es.set(e.idx(), true);
+                }
+            }
+        }
+    }
+}

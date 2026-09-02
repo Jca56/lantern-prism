@@ -15,6 +15,7 @@ use prism_doc::{Doc, UndoStep};
 use prism_math::Vec2;
 use prism_ops::{Ctx, Executor, OpResult, Outcome, UiRequest};
 use prism_props::Value;
+use prism_viewport::{PickRequest, ViewportRequest, ViewportState};
 
 use crate::ui::Ui;
 
@@ -73,6 +74,12 @@ pub struct EditorCtx<'a> {
     /// Requests for the shell (menus, palette, quit) gathered this frame.
     pub requests: &'a mut Vec<UiRequest>,
     pub pointer: Vec2,
+    /// Which area is being drawn, and its viewport state.
+    pub area: usize,
+    pub viewport: &'a mut ViewportState,
+    /// 3D viewports to render this frame, and clicks to resolve after.
+    pub viewports: &'a mut Vec<ViewportRequest>,
+    pub picks: &'a mut Vec<PickRequest>,
 }
 
 impl EditorCtx<'_> {
@@ -109,12 +116,19 @@ impl EditorCtx<'_> {
     }
 }
 
+/// Editor-specific controls in the area header, after the editor dropdown.
+pub fn draw_editor_header(kind: EditorKind, ui: &mut Ui, ctx: &mut EditorCtx) {
+    if kind == EditorKind::Viewport {
+        viewport::header(ui, ctx);
+    }
+}
+
 /// Draw the body of an editor. Returns `true` if it changed something that
 /// affects other areas (theme, scale).
 pub fn draw_editor(kind: EditorKind, ui: &mut Ui, ctx: &mut EditorCtx) -> bool {
     match kind {
         EditorKind::Viewport => {
-            viewport::draw(ui);
+            viewport::draw(ui, ctx);
             false
         }
         EditorKind::Outliner => {

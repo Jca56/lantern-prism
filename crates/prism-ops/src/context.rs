@@ -19,6 +19,8 @@ pub enum UiRequest {
     Palette,
     /// Ask for a path, then run `op` with its `path` property set.
     PathDialog { op: String, save: bool },
+    /// Frame the scene (or the selection) in the active 3D viewport.
+    ViewFrame { selected: bool },
     Quit,
 }
 

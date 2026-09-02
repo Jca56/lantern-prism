@@ -4,7 +4,15 @@
 use core::fmt;
 
 /// Every shader in `shaders/`, embedded at compile time.
-const SOURCES: &[(&str, &str)] = &[("ui.wgsl", include_str!("../../../shaders/ui.wgsl"))];
+const SOURCES: &[(&str, &str)] = &[
+    ("ui.wgsl", include_str!("../../../shaders/ui.wgsl")),
+    ("common3d.wgsl", include_str!("../../../shaders/common3d.wgsl")),
+    ("grid.wgsl", include_str!("../../../shaders/grid.wgsl")),
+    ("mesh.wgsl", include_str!("../../../shaders/mesh.wgsl")),
+    ("wire.wgsl", include_str!("../../../shaders/wire.wgsl")),
+    ("points.wgsl", include_str!("../../../shaders/points.wgsl")),
+    ("pick.wgsl", include_str!("../../../shaders/pick.wgsl")),
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShaderError {
@@ -109,5 +117,10 @@ mod tests {
     fn embedded_ui_shader_loads() {
         let s = load("ui.wgsl").unwrap();
         assert!(s.contains("fn vs_main") && s.contains("fn fs_main"));
+        for name in ["grid.wgsl", "mesh.wgsl", "wire.wgsl", "points.wgsl", "pick.wgsl"] {
+            let s = load(name).unwrap();
+            assert!(s.contains("struct ViewUniforms"), "{name} pulls in common3d");
+            assert_eq!(s.matches("struct ViewUniforms").count(), 1);
+        }
     }
 }

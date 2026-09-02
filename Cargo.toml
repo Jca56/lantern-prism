@@ -9,6 +9,7 @@ members = [
     "crates/prism-eval",
     "crates/prism-doc",
     "crates/prism-ops",
+    "crates/prism-viewport",
     "crates/prism-text",
     "crates/prism-render",
     "crates/prism-ui",
@@ -30,6 +31,7 @@ prism-mesh = { path = "crates/prism-mesh" }
 prism-eval = { path = "crates/prism-eval" }
 prism-doc = { path = "crates/prism-doc" }
 prism-ops = { path = "crates/prism-ops" }
+prism-viewport = { path = "crates/prism-viewport" }
 prism-text = { path = "crates/prism-text" }
 prism-render = { path = "crates/prism-render" }
 prism-ui = { path = "crates/prism-ui" }

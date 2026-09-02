@@ -2,11 +2,12 @@
 
 use prism_doc::{MeshBlock, ObjectMode};
 use prism_math::Vec3;
+use prism_mesh::tables::{E_SELECT, F_SELECT, V_SELECT};
 use prism_props::props;
 
 use crate::builtin::select;
 use crate::context::{Ctx, Outcome};
-use crate::operator::{OpResult, Operator};
+use crate::operator::{OpFlags, OpResult, Operator};
 use crate::registry::Registry;
 
 /// The mesh being edited, if the active object is a mesh in edit mode.
@@ -324,7 +325,130 @@ impl Operator for NormalsMakeConsistent {
     }
 }
 
+props! {
+    pub enum ElemKind {
+        Vert = 0,
+        Edge = 1,
+        Face = 2,
+    }
+}
+
+props! {
+    /// Select one element, as picked in a viewport.
+    pub struct SelectElemProps {
+        pub kind: ElemKind = ElemKind::Vert => { id: 1 },
+        /// Raw handle bits (`Handle::to_raw`).
+        pub handle: i64 = 0 => { id: 2, flags: HIDDEN },
+        pub extend: bool = false => { id: 3 },
+        pub toggle: bool = false => { id: 4 },
+    }
+}
+
+pub struct SelectElem;
+impl Operator for SelectElem {
+    const ID: &'static str = "mesh.select";
+    const LABEL: &'static str = "Select Element";
+    const FLAGS: OpFlags = OpFlags::UNDO;
+    type Props = SelectElemProps;
+    type Modal = ();
+    fn poll(ctx: &Ctx) -> bool {
+        in_edit_mode(ctx)
+    }
+    fn exec(ctx: &mut Ctx, p: &SelectElemProps) -> OpResult<Outcome> {
+        let mode = ctx.doc.scene().map_or(prism_doc::SelectMode::Vertex, |s| s.tool.select_mode);
+        let Some(block) = edit_mesh(ctx) else {
+            return Ok(Outcome::Cancelled);
+        };
+        let m = &mut block.mesh;
+        let raw = p.handle as u64;
+        let elem = match p.kind {
+            ElemKind::Vert => prism_mesh::VertH::from_raw(raw).filter(|&v| m.vert_live(v)).map(prism_doc::Elem::Vert),
+            ElemKind::Edge => prism_mesh::EdgeH::from_raw(raw).filter(|&e| m.edge_live(e)).map(prism_doc::Elem::Edge),
+            ElemKind::Face => prism_mesh::FaceH::from_raw(raw).filter(|&f| m.face_live(f)).map(prism_doc::Elem::Face),
+        };
+        let Some(elem) = elem else {
+            return Err(crate::operator::OpError::Failed("element is gone".into()));
+        };
+        let currently = match elem {
+            prism_doc::Elem::Vert(v) => m.vert_attrs().bools(V_SELECT)[v.idx()],
+            prism_doc::Elem::Edge(e) => m.edge_attrs().bools(E_SELECT)[e.idx()],
+            prism_doc::Elem::Face(f) => m.face_attrs().bools(F_SELECT)[f.idx()],
+        };
+        let on = if p.toggle { !currently } else { true };
+        if !p.extend && !p.toggle {
+            select::set_all(m, false);
+        }
+        match elem {
+            prism_doc::Elem::Vert(v) => m.vert_attrs_mut().bools_mut(V_SELECT).set(v.idx(), on),
+            prism_doc::Elem::Edge(e) => {
+                let [a, b] = m.edge_verts(e);
+                m.edge_attrs_mut().bools_mut(E_SELECT).set(e.idx(), on);
+                if on || !p.extend {
+                    let vs = m.vert_attrs_mut().bools_mut(V_SELECT);
+                    vs.set(a.idx(), on);
+                    vs.set(b.idx(), on);
+                }
+            }
+            prism_doc::Elem::Face(f) => {
+                let verts: Vec<_> = m.verts_of_face(f).collect();
+                let edges: Vec<_> = m.edges_of_face(f).collect();
+                m.face_attrs_mut().bools_mut(F_SELECT).set(f.idx(), on);
+                if on || !p.extend {
+                    let vs = m.vert_attrs_mut().bools_mut(V_SELECT);
+                    for v in verts {
+                        vs.set(v.idx(), on);
+                    }
+                    let es = m.edge_attrs_mut().bools_mut(E_SELECT);
+                    for e in edges {
+                        es.set(e.idx(), on);
+                    }
+                }
+            }
+        }
+        select::flush_mode(m, mode);
+        block.edit.history.retain(|e| *e != elem);
+        if on {
+            block.edit.history.push(elem);
+            block.edit.active = Some(elem);
+        } else if block.edit.active == Some(elem) {
+            block.edit.active = block.edit.history.last().copied();
+        }
+        Ok(Outcome::Finished)
+    }
+}
+
+props! {
+    pub struct SelectModeProps {
+        pub mode: prism_doc::SelectMode = prism_doc::SelectMode::Vertex => { id: 1 },
+    }
+}
+
+pub struct SelectMode;
+impl Operator for SelectMode {
+    const ID: &'static str = "mesh.select_mode";
+    const LABEL: &'static str = "Select Mode";
+    type Props = SelectModeProps;
+    type Modal = ();
+    fn poll(ctx: &Ctx) -> bool {
+        in_edit_mode(ctx)
+    }
+    fn exec(ctx: &mut Ctx, p: &SelectModeProps) -> OpResult<Outcome> {
+        if let Some(s) = ctx.doc.scene_mut() {
+            if s.tool.select_mode == p.mode {
+                return Ok(Outcome::Cancelled);
+            }
+            s.tool.select_mode = p.mode;
+        }
+        if let Some(block) = edit_mesh(ctx) {
+            select::flush_mode(&mut block.mesh, p.mode);
+        }
+        Ok(Outcome::Finished)
+    }
+}
+
 pub fn register(r: &mut Registry) {
+    r.register::<SelectElem>();
+    r.register::<SelectMode>();
     r.register::<SelectAll>();
     r.register::<Delete>();
     r.register::<Extrude>();

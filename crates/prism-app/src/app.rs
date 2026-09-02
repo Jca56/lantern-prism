@@ -8,7 +8,8 @@ use prism_doc::Doc;
 use prism_ops::Executor;
 use prism_math::{Rect, Vec2};
 use prism_render::wgpu;
-use prism_render::{DrawList, Gpu, Pass2d, RenderGraph, SurfaceTarget, TexturePool};
+use prism_render::{DrawList, Gpu, Pass2d, RenderGraph, SurfaceTarget, TexDesc, TexturePool, clear_pass};
+use prism_viewport::Renderer;
 use prism_text::TextEngine;
 use prism_ui::{CursorIcon, Event, Modifiers, ResizeEdge, Shell, WindowCommand, WindowState};
 use winit::application::ApplicationHandler;
@@ -26,6 +27,7 @@ struct Gfx {
     gpu: Gpu,
     surface: SurfaceTarget,
     pass2d: Pass2d,
+    renderer: Renderer,
     pool: TexturePool,
     cursor: CursorIcon,
 }
@@ -91,8 +93,9 @@ impl App {
         };
         let surface = SurfaceTarget::new(&gpu, surface, size.width, size.height);
         let pass2d = Pass2d::new(&gpu, surface.format(), self.text.atlas());
+        let renderer = Renderer::new(&gpu, surface.format());
         log_info!("window: {}x{} @ {:.2}x", size.width, size.height, self.scale);
-        self.gfx = Some(Gfx { window, gpu, surface, pass2d, pool: TexturePool::new(), cursor: CursorIcon::Default });
+        self.gfx = Some(Gfx { window, gpu, surface, pass2d, renderer, pool: TexturePool::new(), cursor: CursorIcon::Default });
     }
 
     /// Rebuild the UI from the pending events (possibly more than once),
@@ -109,14 +112,16 @@ impl App {
         let mut out = None;
         let mut evs: &[Event] = &events;
         let mut command = None;
+        let mut picks = Vec::new();
         for _ in 0..MAX_REBUILDS {
             self.draw.clear();
-            let o = self.shell.frame(evs, window_rect, self.scale, ws, &mut self.doc, &mut self.exec, &mut self.text, &mut self.draw);
+            let mut o = self.shell.frame(evs, window_rect, self.scale, ws, &mut self.doc, &mut self.exec, &mut self.text, &mut self.draw);
             let again = o.rebuild_again;
             command = command.or(o.window_command);
             if o.quit {
                 self.quit = true;
             }
+            picks.append(&mut o.picks);
             out = Some(o);
             evs = &[];
             if !again {
@@ -149,11 +154,20 @@ impl App {
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = gfx.gpu.create_encoder("prism frame");
 
-        let (pass2d, draw, text) = (&mut gfx.pass2d, &self.draw, &mut self.text);
+        let prepared = gfx.renderer.prepare(&gfx.gpu, &self.doc, &out.viewports);
+        let (pass2d, renderer, draw, text) = (&mut gfx.pass2d, &gfx.renderer, &self.draw, &mut self.text);
+        let clear = out.clear;
         let mut graph = RenderGraph::new();
         let backbuffer = graph.import(&view);
+        let depth = graph.transient(TexDesc::depth("depth", size[0], size[1]));
+        graph.add_node("clear", &[], &[backbuffer, depth], move |_, enc, views| {
+            clear_pass(enc, views.get(backbuffer), Some(views.get(depth)), clear);
+        });
+        graph.add_node("viewports", &[], &[backbuffer, depth], move |_, enc, views| {
+            renderer.record(enc, views.get(backbuffer), views.get(depth), &prepared);
+        });
         graph.add_node("ui", &[], &[backbuffer], move |gpu, enc, views| {
-            pass2d.draw(gpu, enc, views.get(backbuffer), size, draw, text.atlas_mut(), Some(out.clear));
+            pass2d.draw(gpu, enc, views.get(backbuffer), size, draw, text.atlas_mut(), None);
         });
         graph.execute(&gfx.gpu, &mut gfx.pool, &mut encoder);
         gfx.pool.end_frame();
@@ -162,6 +176,13 @@ impl App {
         gfx.window.pre_present_notify();
         frame.present();
         log_trace!("frame: {} vertices", self.draw.vertex_count());
+
+        // Clicks in viewports resolve against the GPU after the frame.
+        for pick in picks {
+            let result = gfx.renderer.pick(&gfx.gpu, &self.doc, &pick);
+            self.shell.apply_pick(&mut self.doc, &mut self.exec, &pick, result);
+            self.dirty = true;
+        }
     }
 }
 

@@ -16,5 +16,6 @@ prism-props.workspace = true
 prism-mesh.workspace = true
 prism-doc.workspace = true
 prism-ops.workspace = true
+prism-viewport.workspace = true
 prism-text.workspace = true
 prism-render.workspace = true

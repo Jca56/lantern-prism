@@ -279,11 +279,36 @@ exact.
 **Why:** Every door into the room (hotkey, menu, panel, palette, gizmo later)
 produces the same kind of history entry and the same rollback behaviour.
 
+## D022 — Viewports draw straight into the swapchain, between clear and UI
+**Status:** Proposed (implemented in Phase 5)
+**Decision:** A frame is three graph nodes: `clear` (color + one shared
+window-sized reverse-Z depth transient), `viewports` (each 3D area sets
+viewport + scissor to its body rect and draws grid → solid → wire → vertex
+dots into the same swapchain image, clearing depth per area), then `ui`
+(the 2D pass with `LoadOp::Load`). The shell skips the panel fill for
+viewport bodies so the 3D shows through; everything the UI draws over a
+viewport (inner shadow, mode label, popups) lands on top naturally.
+Picking is a separate on-demand pass into an `R32Uint` target the size of
+the viewport: object ids in object mode, face/edge/vertex ids (kind in the
+top two bits) for the edit object, drawn in that order with depth bias so
+finer elements win. A 64×64 window around the cursor is read back
+**synchronously** (only on a click) and the nearest id of the wanted kind
+within the pick radius is chosen. Selection state reaches the GPU as packed
+one-byte-per-element flag buffers keyed by `Mesh::selection_version`, so a
+click re-uploads flags, never geometry (`Mesh::geometry_version`).
+**Why:** No offscreen color textures, no extra composite pass, one 2D draw
+call kept. Offscreen rendering arrives when a post effect or material
+preview needs it, as a graph change, not an architecture change.
+**Rejected:** Rendering viewports to textures and sampling them from the 2D
+pass (needs per-command texture binding, breaks the single UI draw).
+
 ---
 
 ## Open questions
 - Viewport interaction model: gizmo-first (game-editor native) vs modal hotkeys
   vs both. Both are modal operators under D007, so the foundation is unaffected.
+  Navigation shipped in Phase 5: middle-drag orbit, Shift+middle pan, wheel
+  zoom, Alt+left orbit; presets and framing in the View menu.
 - Widget look / palette for Prism: decided when there are pixels to look at.
   Known taste rules: sizes in multiples of 5, no glows, no help text, big.
 - Resolved 2026-09-01: keyboard focus (D017); text renderer source (D018).

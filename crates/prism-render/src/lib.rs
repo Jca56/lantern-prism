@@ -6,6 +6,7 @@
 //! tests headless; everything above it describes *what* to draw, never how.
 
 pub mod atlas_gpu;
+pub mod clear;
 pub mod draw2d;
 pub mod gpu;
 pub mod graph;
@@ -14,6 +15,7 @@ pub mod shader;
 pub mod surface;
 
 pub use atlas_gpu::AtlasTexture;
+pub use clear::clear_pass;
 pub use draw2d::{DrawList, Vertex2d};
 pub use gpu::{Gpu, GpuError};
 pub use graph::{RenderGraph, TexDesc, TexId, TexturePool, Views};

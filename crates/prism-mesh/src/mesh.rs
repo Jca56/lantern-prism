@@ -120,6 +120,45 @@ impl Mesh {
         self.verts.attrs.vec3s(V_POSITION)
     }
 
+    /// Changes whenever positions, topology, or the smooth/sharp flags
+    /// change: the key for evaluated geometry caches.
+    pub fn geometry_version(&self) -> u64 {
+        use crate::tables::{E_SHARP, F_SMOOTH};
+        [
+            self.verts.attrs.layer(V_POSITION).data.version(),
+            self.verts.edge.version(),
+            self.edges.v.version(),
+            self.edges.loop_.version(),
+            self.edges.attrs.layer(E_SHARP).data.version(),
+            self.loops.vert.version(),
+            self.loops.edge.version(),
+            self.loops.face.version(),
+            self.loops.next.version(),
+            self.faces.loop_.version(),
+            self.faces.len.version(),
+            self.faces.attrs.layer(F_SMOOTH).data.version(),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0)
+    }
+
+    /// Changes whenever selection or hiding changes on any domain.
+    pub fn selection_version(&self) -> u64 {
+        use crate::tables::{E_HIDE, E_SELECT, F_HIDE, F_SELECT, V_HIDE, V_SELECT};
+        [
+            self.verts.attrs.layer(V_SELECT).data.version(),
+            self.verts.attrs.layer(V_HIDE).data.version(),
+            self.edges.attrs.layer(E_SELECT).data.version(),
+            self.edges.attrs.layer(E_HIDE).data.version(),
+            self.faces.attrs.layer(F_SELECT).data.version(),
+            self.faces.attrs.layer(F_HIDE).data.version(),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0)
+    }
+
     /// Addresses of every storage chunk (topology and attributes), for
     /// memory accounting across snapshots that share structure.
     pub fn chunk_ptrs(&self, out: &mut std::collections::HashSet<usize>) {
