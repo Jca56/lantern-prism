@@ -216,6 +216,20 @@ one clip stack, and the 3D viewport composites into the same frame. Porting a
 proven engine beats rewriting 18k lines; keeping it GPU-free keeps it in the
 headless test set.
 
+## D019 — Color pipeline: sRGB surface, linear shading, one conversion point
+**Status:** Proposed (implemented in Phase 1)
+**Decision:** The swapchain uses an sRGB format when available; shaders work
+in linear light and the hardware encodes on write. Theme and widget colors are
+authored and stored **sRGB-encoded** (`Color::hex(0x141414)` means what the
+eye sees) and converted to linear exactly once, when `DrawList` pushes a
+vertex. The glyph atlas is `Rgba8Unorm` (linear) holding **premultiplied**
+texels: coverage as `(c, c, c, c)`, emoji as premultiplied linear RGBA. The
+2D pass blends premultiplied. Dark text on light ground gets lntrn-text's
+coverage-gamma thickening in the shader; light text is untouched.
+**Why:** One conversion point means no double-encoding bugs; blending in
+linear light is correct for shapes; the atlas trick lets one pipeline draw
+text and emoji with a single `texel × tint`.
+
 ---
 
 ## Open questions

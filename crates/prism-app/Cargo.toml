@@ -1,0 +1,22 @@
+[package]
+name = "prism-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Prism: the editor binary. winit loop, wiring, redraw on demand."
+
+[[bin]]
+name = "prism"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+prism-core.workspace = true
+prism-math.workspace = true
+prism-text.workspace = true
+prism-render.workspace = true
+prism-ui.workspace = true
+winit.workspace = true

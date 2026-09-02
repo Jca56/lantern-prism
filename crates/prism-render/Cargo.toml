@@ -1,0 +1,16 @@
+[package]
+name = "prism-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "wgpu wrapper, render graph and the 2D draw-list pass for Prism."
+
+[lints]
+workspace = true
+
+[dependencies]
+prism-core.workspace = true
+prism-math.workspace = true
+prism-text.workspace = true
+wgpu.workspace = true

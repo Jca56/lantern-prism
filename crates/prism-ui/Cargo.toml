@@ -1,0 +1,17 @@
+[package]
+name = "prism-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Prism UI: input events, screen/area/region layout, immediate-mode widgets, props-driven panels."
+
+[lints]
+workspace = true
+
+[dependencies]
+prism-core.workspace = true
+prism-math.workspace = true
+prism-props.workspace = true
+prism-text.workspace = true
+prism-render.workspace = true

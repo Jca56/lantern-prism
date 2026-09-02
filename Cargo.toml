@@ -5,6 +5,9 @@ members = [
     "crates/prism-core",
     "crates/prism-props",
     "crates/prism-text",
+    "crates/prism-render",
+    "crates/prism-ui",
+    "crates/prism-app",
 ]
 
 [workspace.package]
@@ -18,6 +21,10 @@ prism-math = { path = "crates/prism-math" }
 prism-core = { path = "crates/prism-core" }
 prism-props = { path = "crates/prism-props" }
 prism-text = { path = "crates/prism-text" }
+prism-render = { path = "crates/prism-render" }
+prism-ui = { path = "crates/prism-ui" }
+wgpu = "28"
+winit = "0.30"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"

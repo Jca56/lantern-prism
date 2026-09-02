@@ -77,8 +77,8 @@ prism/
     prism-text/              fonts, shaping, layout, raster, atlas packing (GPU-free; ported from lntrn-text)
     prism-render/            wgpu wrapper, render graph, 2D draw-list pass, shaders, GPU caches
     prism-viewport/          3D editor: camera, grid, shading, overlays, picking, gizmos
-    prism-ui/                screen / areas / regions, widgets, props-driven panels
-    prism-app/               winit loop, wiring, the binary
+    prism-ui/                input events, screen / areas / regions, widgets, props-driven panels
+    prism-app/               winit loop, event translation, wiring, the `prism` binary
   shaders/                   WGSL, with a tiny in-house include preprocessor
   docs/                      this file, DECISIONS.md, design/*.md
 ```

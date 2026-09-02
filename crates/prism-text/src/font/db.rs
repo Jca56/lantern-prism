@@ -128,7 +128,7 @@ impl FontDb {
                 records.push(FaceRecord::from_meta(meta, FaceSource::File(path.clone())));
             }
         }
-        prism_core::log_warn!("font db: {} faces from {} files ({} skipped: CFF/bitmap/unreadable)",
+        prism_core::log_info!("font db: {} faces from {} files ({} skipped: CFF/bitmap/unreadable)",
             records.len(),
             files.len(),
             skipped
