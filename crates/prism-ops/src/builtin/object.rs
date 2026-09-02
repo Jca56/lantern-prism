@@ -224,31 +224,6 @@ impl Operator for Duplicate {
 }
 
 props! {
-    pub struct TranslateProps {
-        pub delta: Vec3 = Vec3::ZERO => { id: 1, subtype: Translation },
-    }
-}
-
-pub struct Translate;
-impl Operator for Translate {
-    const ID: &'static str = "object.translate";
-    const LABEL: &'static str = "Move";
-    type Props = TranslateProps;
-    type Modal = ();
-    fn poll(ctx: &Ctx) -> bool {
-        !ctx.doc.selected_objects().is_empty()
-    }
-    fn exec(ctx: &mut Ctx, p: &TranslateProps) -> OpResult<Outcome> {
-        for id in ctx.doc.selected_objects() {
-            if let Some(o) = ctx.doc.objects.get_mut(id) {
-                o.location += p.delta;
-            }
-        }
-        Ok(Outcome::Finished)
-    }
-}
-
-props! {
     pub struct RenameProps {
         pub name: String = String::new() => { id: 1 },
     }
@@ -352,7 +327,6 @@ pub fn register(r: &mut Registry) {
     r.register::<Select>();
     r.register::<SelectAll>();
     r.register::<Duplicate>();
-    r.register::<Translate>();
     r.register::<Rename>();
     r.register::<ModeSet>();
     r.register::<Shade>();

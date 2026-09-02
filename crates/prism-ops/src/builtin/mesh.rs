@@ -1,7 +1,6 @@
 //! Edit-mode operators on the active object's mesh.
 
 use prism_doc::{MeshBlock, ObjectMode};
-use prism_math::Vec3;
 use prism_mesh::tables::{E_SELECT, F_SELECT, V_SELECT};
 use prism_props::props;
 
@@ -11,7 +10,7 @@ use crate::operator::{OpFlags, OpResult, Operator};
 use crate::registry::Registry;
 
 /// The mesh being edited, if the active object is a mesh in edit mode.
-fn edit_mesh<'c>(ctx: &'c mut Ctx<'_>) -> Option<&'c mut MeshBlock> {
+pub(crate) fn edit_mesh<'c>(ctx: &'c mut Ctx<'_>) -> Option<&'c mut MeshBlock> {
     let id = ctx.doc.active_object_id();
     let o = ctx.doc.objects.get(id)?;
     if o.mode != ObjectMode::Edit {
@@ -20,7 +19,7 @@ fn edit_mesh<'c>(ctx: &'c mut Ctx<'_>) -> Option<&'c mut MeshBlock> {
     ctx.doc.object_mesh_mut(id)
 }
 
-fn in_edit_mode(ctx: &Ctx) -> bool {
+pub(crate) fn in_edit_mode(ctx: &Ctx) -> bool {
     let id = ctx.doc.active_object_id();
     ctx.doc.objects.get(id).is_some_and(|o| o.mode == ObjectMode::Edit) && ctx.doc.object_mesh(id).is_some()
 }
@@ -124,51 +123,6 @@ impl Operator for Delete {
         block.edit.active = None;
         block.edit.history.clear();
         ctx.report(format!("Deleted {n}"));
-        Ok(Outcome::Finished)
-    }
-}
-
-props! {
-    pub struct ExtrudeProps {
-        /// Distance along the average normal of the selected faces.
-        pub offset: f64 = 1.0 => { id: 1, soft: -10.0..=10.0, subtype: Distance },
-    }
-}
-
-pub struct Extrude;
-impl Operator for Extrude {
-    const ID: &'static str = "mesh.extrude";
-    const LABEL: &'static str = "Extrude Faces";
-    type Props = ExtrudeProps;
-    type Modal = ();
-    fn poll(ctx: &Ctx) -> bool {
-        in_edit_mode(ctx)
-    }
-    fn exec(ctx: &mut Ctx, p: &ExtrudeProps) -> OpResult<Outcome> {
-        let Some(block) = edit_mesh(ctx) else {
-            return Ok(Outcome::Cancelled);
-        };
-        let m = &mut block.mesh;
-        let faces = select::selected_faces(m);
-        if faces.is_empty() {
-            return Ok(Outcome::Cancelled);
-        }
-        let r = m.extrude_faces(&faces)?;
-        // Each new vertex moves along the average normal of the new faces
-        // around it, so a flat region moves as a slab and a closed shell grows.
-        let normals: Vec<Vec3> = r.faces.iter().map(|&f| m.face_normal(f)).collect();
-        for &v in &r.verts {
-            let mut n = Vec3::ZERO;
-            for (i, &f) in r.faces.iter().enumerate() {
-                if m.verts_of_face(f).any(|x| x == v) {
-                    n += normals[i];
-                }
-            }
-            let p0 = m.position(v);
-            m.set_position(v, p0 + n.normalize_or_zero() * p.offset);
-        }
-        select::select_faces(m, &r.faces);
-        ctx.report(format!("Extruded {} face(s)", r.faces.len()));
         Ok(Outcome::Finished)
     }
 }
@@ -451,7 +405,6 @@ pub fn register(r: &mut Registry) {
     r.register::<SelectMode>();
     r.register::<SelectAll>();
     r.register::<Delete>();
-    r.register::<Extrude>();
     r.register::<Dissolve>();
     r.register::<Subdivide>();
     r.register::<MergeByDistance>();

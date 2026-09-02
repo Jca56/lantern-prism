@@ -331,13 +331,43 @@ but nothing is *only* reachable by key.
 is one more door into the operator registry (D007), so it costs no new
 verbs, only a `MenuContext → ContextMenu` builder per situation.
 
+## D024 — Transforms are pointer-driven modal operators; gizmo-driven, R cycles
+**Status:** Accepted (Alva, 2026-09-02: "just R that cycles between them")
+**Decision:** Move, Rotate and Scale are three modal operators
+(`transform.translate` / `.rotate` / `.scale`) in `prism-ops`. They act on
+the selected objects, or in edit mode on the selected vertices, in world
+space about the selection's mean, and record `delta`, `axis` + `angle`, or
+`factor` so Adjust Last Operation replays them. Pointer motion reaches the
+world through a **`ViewInfo` on the operator `Ctx`**: plain view matrices
+plus the viewport rect, filled by the viewport editor (the camera type lives
+above `prism-ops`). Free moves slide on the plane through the pivot that
+faces the camera; constrained moves take the nearest point on the axis;
+rotation sweeps the angle around the projected pivot, unwrapped past 180°;
+scale is the ratio of pointer distances from the pivot. **X / Y / Z** toggle
+a world-axis constraint, **Esc or right-click cancels** (the executor
+restores its pre-invoke snapshot), **click or Enter confirms**; an operator
+started by a *press* (a gizmo handle) confirms on release instead.
+`mesh.extrude` has the same shape: it duplicates the selection on invoke and
+drags the new geometry along its normal. While a modal operator runs, the
+shell hands it every event and hides left/right buttons and keys from the
+widgets, keeping motion, middle-drag and wheel so the view still navigates.
+Every operator the UI starts goes through `invoke` (menus and keys pass the
+click that chose them, already released): plain operators finish at once,
+interactive ones keep running.
+The interaction model, settling the open question: **gizmo-driven**. The
+viewport shows one gizmo at a time (Move, Rotate or Scale, big handles) and
+**R cycles** between them; there are no G/R/S grab hotkeys. Gizmo and box
+select are Phase 6's next slices on top of this engine.
+**Why:** One engine under gizmo drags, menu actions and extrude, so undo,
+cancel and adjust-last come from the executor for free.
+
 ---
 
 ## Open questions
-- Viewport interaction model: gizmo-first (game-editor native) vs modal hotkeys
-  vs both. Both are modal operators under D007, so the foundation is unaffected.
+- ~~Viewport interaction model~~ → D024 (gizmo-driven, R cycles the tool).
   Navigation shipped in Phase 5: middle-drag orbit, Shift+middle pan, wheel
   zoom, Alt+left orbit; presets and framing in the View menu.
 - Widget look / palette for Prism: decided when there are pixels to look at.
   Known taste rules: sizes in multiples of 5, no glows, no help text, big.
 - Resolved 2026-09-01: keyboard focus (D017); text renderer source (D018).
+- Resolved 2026-09-02: interaction model and transform engine (D024).

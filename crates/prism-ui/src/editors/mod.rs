@@ -13,10 +13,11 @@ pub use properties::PropertiesState;
 
 use prism_doc::{Doc, UndoStep};
 use prism_math::Vec2;
-use prism_ops::{Ctx, Executor, OpResult, Outcome, UiRequest};
+use prism_ops::{Ctx, Executor, Flow, OpResult, UiRequest, ViewInfo};
 use prism_props::Value;
 use prism_viewport::{PickRequest, ViewportRequest, ViewportState};
 
+use crate::event::{Event, Modifiers, MouseButton};
 use crate::ui::Ui;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -74,6 +75,9 @@ pub struct EditorCtx<'a> {
     /// Requests for the shell (menus, palette, quit) gathered this frame.
     pub requests: &'a mut Vec<UiRequest>,
     pub pointer: Vec2,
+    /// The 3D view of this area, when it is a viewport: interactive
+    /// operators need it to map pointer motion to the world.
+    pub view: Option<ViewInfo>,
     /// Which area is being drawn, and its viewport state.
     pub area: usize,
     pub viewport: &'a mut ViewportState,
@@ -84,12 +88,31 @@ pub struct EditorCtx<'a> {
     pub context_menu: &'a mut Option<crate::context_menu::MenuContext>,
 }
 
-/// Run one operator from the UI, collecting its requests.
-pub fn run_op(doc: &mut Doc, exec: &mut Executor, pointer: Vec2, op: &str, overrides: &[(String, Value)], requests: &mut Vec<UiRequest>) -> OpResult<Outcome> {
+/// The event a menu item or palette entry hands an operator: the click that
+/// chose it has already released, so an interactive operator started this
+/// way confirms on the *next* click rather than on release.
+pub fn chosen_at(pointer: Vec2) -> Event {
+    Event::Button { button: MouseButton::Left, pressed: false, pos: pointer, mods: Modifiers::NONE }
+}
+
+/// Start one operator from the UI with `event`, collecting its requests.
+/// Plain operators finish at once; interactive ones stay running in the
+/// executor and receive later events through the shell.
+#[allow(clippy::too_many_arguments)]
+pub fn invoke_op(
+    doc: &mut Doc,
+    exec: &mut Executor,
+    pointer: Vec2,
+    view: Option<ViewInfo>,
+    op: &str,
+    overrides: &[(&str, Value)],
+    requests: &mut Vec<UiRequest>,
+    event: &Event,
+) -> OpResult<Flow> {
     let mut ctx = Ctx::new(doc);
     ctx.pointer = pointer;
-    let ov: Vec<(&str, Value)> = overrides.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
-    let r = exec.run_with(op, &ov, &mut ctx);
+    ctx.view = view;
+    let r = exec.invoke_with(op, overrides, &mut ctx, event);
     requests.append(&mut exec.requests);
     if r.is_ok() && (op == "wm.save" || op == "wm.save_as") {
         exec.mark_saved();
@@ -97,17 +120,16 @@ pub fn run_op(doc: &mut Doc, exec: &mut Executor, pointer: Vec2, op: &str, overr
     r
 }
 
+/// Run one operator chosen from a menu, key or panel (see [`chosen_at`]).
+pub fn run_op(doc: &mut Doc, exec: &mut Executor, pointer: Vec2, view: Option<ViewInfo>, op: &str, overrides: &[(String, Value)], requests: &mut Vec<UiRequest>) -> OpResult<Flow> {
+    let ov: Vec<(&str, Value)> = overrides.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+    invoke_op(doc, exec, pointer, view, op, &ov, requests, &chosen_at(pointer))
+}
+
 impl EditorCtx<'_> {
     /// Run an operator with overrides; requests are collected for the shell.
-    pub fn run(&mut self, op: &str, overrides: &[(&str, Value)]) -> OpResult<Outcome> {
-        let mut ctx = Ctx::new(self.doc);
-        ctx.pointer = self.pointer;
-        let r = self.exec.run_with(op, overrides, &mut ctx);
-        self.requests.append(&mut self.exec.requests);
-        if r.is_ok() && (op == "wm.save" || op == "wm.save_as") {
-            self.exec.mark_saved();
-        }
-        r
+    pub fn run(&mut self, op: &str, overrides: &[(&str, Value)]) -> OpResult<Flow> {
+        invoke_op(self.doc, self.exec, self.pointer, self.view, op, overrides, self.requests, &chosen_at(self.pointer))
     }
 
     /// Record a direct property edit as an undo step. While the pointer is

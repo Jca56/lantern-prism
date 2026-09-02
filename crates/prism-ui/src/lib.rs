@@ -21,6 +21,7 @@ pub mod panel;
 pub mod popups;
 pub mod screen;
 pub mod shell;
+mod shell_ops;
 pub mod state;
 pub mod theme;
 pub mod titlebar;

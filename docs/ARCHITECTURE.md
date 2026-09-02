@@ -370,9 +370,10 @@ later Material Preview), overlays (wire-on-shaded, vertex dots, face centers,
 normals, selection tint, active highlight) and gizmos (a 3D transform gizmo is
 a modal operator with a drawn handle). Multiple viewports each own a camera.
 
-Interaction model — **gizmo-first** (game-editor native) with hotkey-modal
-transforms available too — is a Phase 5 UI decision. Both are modal operators
-underneath, so nothing here depends on the answer.
+Interaction model (D024): **gizmo-driven**. One gizmo shows at a time (Move,
+Rotate, Scale) and R cycles it; transforms are pointer-driven modal operators
+in `prism-ops` that see the view through a `ViewInfo` on their context, so a
+gizmo drag, a menu action and an interactive extrude share one engine.
 
 ---
 

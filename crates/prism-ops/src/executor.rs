@@ -137,6 +137,16 @@ impl Executor {
         self.run(id, Some(props), ctx)
     }
 
+    /// Start interactively with default props plus named overrides.
+    pub fn invoke_with(&mut self, id: &str, overrides: &[(&str, Value)], ctx: &mut Ctx, event: &Event) -> OpResult<Flow> {
+        let info = self.registry.get(id).ok_or_else(|| OpError::Unknown(id.to_owned()))?;
+        let mut props = info.new_props();
+        for (name, v) in overrides {
+            props.set_by_name(name, v.clone()).map_err(|e| OpError::Failed(e.to_string()))?;
+        }
+        self.invoke(id, Some(props), ctx, event)
+    }
+
     /// Start an operator interactively from `event`. A modal operator stays
     /// running until [`Self::modal_event`] reports it finished.
     pub fn invoke(&mut self, id: &str, props: Option<Box<dyn Reflect>>, ctx: &mut Ctx, event: &Event) -> OpResult<Flow> {
@@ -198,9 +208,11 @@ impl Executor {
             Ok(Flow::Cancelled) | Err(_) => {
                 *ctx.doc = running.before;
                 ctx.requests.clear();
-                if let Err(e) = &result {
-                    self.last_report = Some(format!("{label}: {e}"));
-                }
+                ctx.report.take();
+                self.last_report = Some(match &result {
+                    Err(e) => format!("{label}: {e}"),
+                    _ => format!("{label} cancelled"),
+                });
             }
         }
         Some(result)

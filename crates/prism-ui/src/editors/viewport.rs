@@ -3,8 +3,8 @@
 
 use prism_doc::{ObjectMode, SelectMode};
 use prism_math::{Color, Rect, Vec2};
-use prism_ops::UiRequest;
-use prism_viewport::{PickMode, PickRequest, Shading, ViewColors, ViewPreset, ViewportRequest};
+use prism_ops::{UiRequest, ViewInfo};
+use prism_viewport::{Camera, PickMode, PickRequest, Shading, ViewColors, ViewPreset, ViewportRequest};
 
 use crate::editors::EditorCtx;
 use crate::state::CursorIcon;
@@ -14,6 +14,13 @@ use crate::ui::{Sense, Ui};
 /// How far (logical px) the pointer may wander between press and release
 /// and still count as a click rather than a drag.
 const CLICK_SLOP: f64 = 8.0;
+
+/// What an operator sees of this viewport: its camera as plain matrices
+/// over `rect`, the body in window pixels.
+pub fn view_info(camera: &Camera, rect: Rect) -> ViewInfo {
+    let aspect = rect.width() / rect.height().max(1.0);
+    ViewInfo::new(rect, camera.view_proj(aspect), camera.position(), camera.forward(), camera.ortho)
+}
 
 /// Colors the viewport takes from the theme.
 pub fn view_colors(theme: &Theme, m: &Metrics) -> ViewColors {

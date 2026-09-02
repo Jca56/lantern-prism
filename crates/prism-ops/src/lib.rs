@@ -16,7 +16,7 @@ pub mod keymap;
 pub mod operator;
 pub mod registry;
 
-pub use context::{Ctx, Flow, Outcome, UiRequest};
+pub use context::{Ctx, Flow, Outcome, UiRequest, ViewInfo};
 pub use executor::{Executor, RunningModal};
 pub use keymap::{KeyConfig, KeyItem, KeyMap, Trigger};
 pub use operator::{OpError, OpFlags, OpResult, Operator};

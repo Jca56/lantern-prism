@@ -7,14 +7,13 @@ use prism_doc::{Doc, ObjectMode};
 use prism_math::{Rect, Vec2};
 use prism_ops::keymap::{CTX_MESH, CTX_OBJECT, CTX_WINDOW};
 use prism_ops::{Ctx, Executor, KeyConfig, UiRequest};
-use prism_props::Value;
 use prism_render::DrawList;
 use prism_text::TextEngine;
-use prism_viewport::{PickPurpose, PickRequest, PickResult, Shading, ViewportRequest};
+use prism_viewport::{PickRequest, ViewportRequest};
 
-use crate::context_menu::{ContextMenu, MenuContext, ViewFlags};
-use crate::editors::{EditorCtx, EditorKind, GalleryState, OutlinerState, Prefs, PropertiesState, draw_editor, draw_editor_header, run_op};
-use crate::event::Event;
+use crate::context_menu::{ContextMenu, MenuContext};
+use crate::editors::{EditorCtx, EditorKind, GalleryState, OutlinerState, Prefs, PropertiesState, draw_editor, draw_editor_header, run_op, viewport};
+use crate::event::{Event, MouseButton};
 use crate::id::WidgetId;
 use crate::popups::{self, Popup};
 use crate::screen::{AreaId, Axis, Screen};
@@ -61,8 +60,8 @@ pub struct Shell {
     pub gallery: GalleryState,
     pub outliner: OutlinerState,
     pub properties: PropertiesState,
-    popup: Option<Popup>,
-    drag_sep: Option<usize>,
+    pub(crate) popup: Option<Popup>,
+    pub(crate) drag_sep: Option<usize>,
 }
 
 impl Default for Shell {
@@ -121,21 +120,21 @@ impl Shell {
     ) -> ShellOutput {
         let theme = self.prefs.theme.clone();
         let m = self.metrics(window_scale);
-        self.state.begin_frame(events, m.widget_h);
         let mut requests: Vec<UiRequest> = Vec::new();
         let mut viewports: Vec<ViewportRequest> = Vec::new();
         let mut picks: Vec<PickRequest> = Vec::new();
         let mut context_menu: Option<MenuContext> = None;
-        let pointer = self.state.pointer;
 
-        // A running modal operator sees every event first.
-        if exec.is_modal() {
-            for ev in events {
-                let mut ctx = Ctx::new(doc);
-                ctx.pointer = pointer;
-                exec.modal_event(&mut ctx, ev);
-                requests.append(&mut exec.requests);
-            }
+        // A running modal operator owns the buttons and keys; the UI still
+        // sees motion (hover, cursor) and the middle button and wheel, so the
+        // view can be navigated mid-transform.
+        let modal = exec.is_modal();
+        let owned_by_modal = |e: &Event| matches!(e, Event::Button { button: MouseButton::Left | MouseButton::Right, .. } | Event::Key { .. } | Event::Text(_));
+        let ui_events: Vec<Event> = if modal { events.iter().filter(|e| !owned_by_modal(e)).cloned().collect() } else { Vec::new() };
+        self.state.begin_frame(if modal { &ui_events } else { events }, m.widget_h);
+        let pointer = self.state.pointer;
+        if modal {
+            self.modal_events(events, doc, exec, &mut requests);
         }
 
         // Resize grabs along the undecorated edges come before everything.
@@ -180,7 +179,7 @@ impl Shell {
 
         // ---- focus (D017) -------------------------------------------------
         if self.prefs.focus_follows_mouse {
-            if st.pointer_in_window && self.popup.is_none() && let Some(a) = self.screen.area_at(st.pointer) {
+            if st.pointer_in_window && self.popup.is_none() && !modal && let Some(a) = self.screen.area_at(st.pointer) {
                 self.screen.active = Some(a);
             }
         } else if st.pressed
@@ -193,6 +192,7 @@ impl Shell {
 
         // ---- popup (drawn first so it claims the pointer) --------------
         let mut refresh_menu = false;
+        let popup_view = self.target_view();
         if let Some(popup) = self.popup.as_mut() {
             let entries: Vec<(String, String)> = match popup {
                 Popup::Palette { query, .. } => {
@@ -202,7 +202,7 @@ impl Shell {
             };
             let mut ui = Ui::new(draw, text, &theme, m, &mut self.state, window, window, WidgetId::ROOT.with("popup"), 0);
             ui.set_window_rect(window);
-            let result = popups::draw(&mut ui, popup, window, &entries, doc, exec, &mut requests, pointer);
+            let result = popups::draw(&mut ui, popup, window, &entries, doc, exec, &mut requests, pointer, popup_view);
             ui.finish();
             if result.close {
                 self.popup = None;
@@ -239,6 +239,7 @@ impl Shell {
                 Vec2::new(l.header.max.x - m.gap, l.header.max.y),
             );
             let area_vp = &mut self.screen.area_mut(l.area).expect("live area").viewport;
+            let view = (kind == EditorKind::Viewport).then(|| viewport::view_info(&area_vp.camera, l.body));
             let mut ui = Ui::new(draw, text, &theme, m, &mut self.state, content, l.header, base.with("header"), 0);
             ui.set_window_rect(window);
             ui.row(|ui| {
@@ -257,6 +258,7 @@ impl Shell {
                         properties: &mut self.properties,
                         requests: &mut requests,
                         pointer,
+                        view,
                         area: l.area,
                         viewport: area_vp,
                         viewports: &mut viewports,
@@ -291,6 +293,7 @@ impl Shell {
                 properties: &mut self.properties,
                 requests: &mut requests,
                 pointer,
+                view,
                 area: l.area,
                 viewport: area_vp,
                 viewports: &mut viewports,
@@ -325,6 +328,7 @@ impl Shell {
                 CTX_OBJECT
             };
             let contexts = [editor_ctx, mode_ctx, CTX_WINDOW];
+            let view = self.target_view();
             for k in leftover {
                 let ev = Event::Key { key: k.key, pressed: true, repeat: k.repeat, mods: k.mods };
                 let item = {
@@ -332,7 +336,7 @@ impl Shell {
                     self.keys.resolve(&contexts, &ev, |op| exec.registry.get(op).is_some_and(|i| i.poll(&ctx))).cloned()
                 };
                 if let Some(item) = item {
-                    let _ = run_op(doc, exec, pointer, &item.op, &item.overrides, &mut requests);
+                    let _ = run_op(doc, exec, pointer, view, &item.op, &item.overrides, &mut requests);
                     self.state.request_rebuild = true;
                 }
             }
@@ -345,43 +349,7 @@ impl Shell {
             self.state.request_rebuild = true;
         }
 
-        // ---- requests from operators --------------------------------------
-        let mut quit = false;
-        for r in requests {
-            match r {
-                UiRequest::Menu(name) => self.popup = popups::menu(&name, pointer),
-                UiRequest::Palette => self.popup = Some(Popup::Palette { query: String::new(), selected: 0 }),
-                UiRequest::PathDialog { op, save } => {
-                    let text = doc.path.as_ref().map_or_else(|| "untitled.prism".to_owned(), |p| p.display().to_string());
-                    self.popup = Some(Popup::Path { op, save, text });
-                }
-                UiRequest::Quit => quit = true,
-                UiRequest::ViewFrame { selected } => {
-                    let bounds = prism_viewport::scene_bounds(doc, selected);
-                    if let Some(a) = self.target_viewport()
-                        && let Some(area) = self.screen.area_mut(a)
-                    {
-                        area.viewport.camera.frame(&bounds);
-                    }
-                }
-                UiRequest::ViewShading { wire } => {
-                    if let Some(a) = self.target_viewport()
-                        && let Some(area) = self.screen.area_mut(a)
-                    {
-                        area.viewport.shading = if wire { Shading::Wire } else { Shading::Solid };
-                    }
-                }
-                UiRequest::ViewToggleGrid => {
-                    if let Some(a) = self.target_viewport()
-                        && let Some(area) = self.screen.area_mut(a)
-                    {
-                        area.viewport.overlays.grid = !area.viewport.overlays.grid;
-                    }
-                }
-                UiRequest::Undo | UiRequest::Redo | UiRequest::HistoryClear => {}
-            }
-            self.state.request_rebuild = true;
-        }
+        let quit = self.apply_requests(requests, doc);
 
         // A tool in the context menu changed something it displays (shading,
         // grid, select mode). Now that its request has been applied, rebuild
@@ -416,72 +384,13 @@ impl Shell {
         }
 
         self.state.end_frame();
-        let cursor = if edge_cursor != CursorIcon::Default { edge_cursor } else { sep_cursor.unwrap_or(self.state.cursor_icon) };
-        ShellOutput { cursor, rebuild_again: self.state.request_rebuild, clear: theme.bg, window_command, quit, viewports, picks }
-    }
-
-    /// The viewport area view requests apply to: the active one if it is a
-    /// viewport, else the first viewport on screen.
-    fn target_viewport(&self) -> Option<AreaId> {
-        let is_vp = |a: AreaId| self.screen.area(a).is_some_and(|ar| ar.editor == EditorKind::Viewport);
-        self.screen.active.filter(|&a| is_vp(a)).or_else(|| self.screen.layouts().iter().map(|l| l.area).find(|&a| is_vp(a)))
-    }
-
-    /// Display flags of a viewport area (for the context menu's tool strip).
-    fn view_flags_for(&self, area: Option<AreaId>) -> ViewFlags {
-        area.or_else(|| self.target_viewport())
-            .and_then(|a| self.screen.area(a))
-            .map_or(ViewFlags::default(), |ar| ViewFlags { wire: ar.viewport.shading == Shading::Wire, grid: ar.viewport.overlays.grid })
-    }
-
-    /// Turn a resolved pick into a selection operator, or open the context
-    /// menu for a right click.
-    pub fn apply_pick(&mut self, doc: &mut Doc, exec: &mut Executor, req: &PickRequest, result: PickResult) {
-        let mut requests = Vec::new();
-        if req.purpose == PickPurpose::ContextMenu {
-            // Right-clicking something unselected selects it first.
-            let selected = match result {
-                PickResult::Object(id) => doc.objects.get(id).is_some_and(|o| o.selected),
-                PickResult::Vert(m, v) => doc.meshes.get(m).is_some_and(|b| b.mesh.vert_attrs().bools(prism_mesh::tables::V_SELECT)[v.idx()]),
-                PickResult::Edge(m, e) => doc.meshes.get(m).is_some_and(|b| b.mesh.edge_attrs().bools(prism_mesh::tables::E_SELECT)[e.idx()]),
-                PickResult::Face(m, f) => doc.meshes.get(m).is_some_and(|b| b.mesh.face_attrs().bools(prism_mesh::tables::F_SELECT)[f.idx()]),
-                PickResult::Nothing => true,
-            };
-            if !selected {
-                let plain = PickRequest { extend: false, toggle: false, purpose: PickPurpose::Select, ..*req };
-                self.apply_pick(doc, exec, &plain, result);
-            }
-            let context = ContextMenu::context_for(doc, result);
-            let flags = self.view_flags_for(Some(req.area));
-            self.popup = Some(Popup::Context(ContextMenu::build(context, doc, exec, req.pos, flags)));
-            self.state.request_rebuild = true;
-            return;
-        }
-        let ov = |extra: Vec<(String, Value)>| -> Vec<(String, Value)> {
-            let mut v = vec![("extend".to_owned(), Value::Bool(req.extend)), ("toggle".to_owned(), Value::Bool(req.toggle))];
-            v.extend(extra);
-            v
+        let cursor = if exec.is_modal() {
+            CursorIcon::Grabbing
+        } else if edge_cursor != CursorIcon::Default {
+            edge_cursor
+        } else {
+            sep_cursor.unwrap_or(self.state.cursor_icon)
         };
-        match result {
-            PickResult::Nothing => {
-                if !req.extend && !req.toggle {
-                    let op = if req.mode == prism_viewport::PickMode::Object { "object.select_all" } else { "mesh.select_all" };
-                    let _ = run_op(doc, exec, req.pos, op, &[("action".to_owned(), Value::Enum(2))], &mut requests);
-                }
-            }
-            PickResult::Object(id) => {
-                let _ = run_op(doc, exec, req.pos, "object.select", &ov(vec![("id".to_owned(), Value::Id(id))]), &mut requests);
-            }
-            PickResult::Vert(_, v) => {
-                let _ = run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(0)), ("handle".to_owned(), Value::I64(v.to_raw() as i64))]), &mut requests);
-            }
-            PickResult::Edge(_, e) => {
-                let _ = run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(1)), ("handle".to_owned(), Value::I64(e.to_raw() as i64))]), &mut requests);
-            }
-            PickResult::Face(_, f) => {
-                let _ = run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(2)), ("handle".to_owned(), Value::I64(f.to_raw() as i64))]), &mut requests);
-            }
-        }
-        self.state.request_rebuild = true;
+        ShellOutput { cursor, rebuild_again: self.state.request_rebuild, clear: theme.bg, window_command, quit, viewports, picks }
     }
 }

@@ -197,7 +197,7 @@ fn ten_thousand_undo_steps_stay_in_budget() {
     ex.run_with("object.select", &[("id", Value::Id(cube))], &mut ctx).unwrap();
     let base = ctx.doc.objects.get(cube).unwrap().location;
     for _ in 0..10_000 {
-        ex.run_with("object.translate", &[("delta", Value::Vec3(Vec3::new(0.001, 0.0, 0.0)))], &mut ctx).unwrap();
+        ex.run_with("transform.translate", &[("delta", Value::Vec3(Vec3::new(0.001, 0.0, 0.0)))], &mut ctx).unwrap();
     }
     let stats = ex.history.stats();
     assert_eq!(stats.steps, 10_000);

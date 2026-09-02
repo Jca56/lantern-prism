@@ -5,7 +5,7 @@
 
 use prism_doc::Doc;
 use prism_math::{Rect, Vec2};
-use prism_ops::{Ctx, Executor, UiRequest};
+use prism_ops::{Ctx, Executor, UiRequest, ViewInfo};
 use prism_props::Value;
 
 use crate::context_menu::{ContextMenu, Item, Width};
@@ -79,11 +79,13 @@ struct Host<'a> {
     exec: &'a mut Executor,
     requests: &'a mut Vec<UiRequest>,
     pointer: Vec2,
+    /// The 3D view the menu was opened over, for interactive operators.
+    view: Option<ViewInfo>,
 }
 
 impl Host<'_> {
     fn run(&mut self, op: &str, overrides: &[(String, Value)]) {
-        let _ = run_op(self.doc, self.exec, self.pointer, op, overrides, self.requests);
+        let _ = run_op(self.doc, self.exec, self.pointer, self.view, op, overrides, self.requests);
     }
 }
 
@@ -98,8 +100,9 @@ pub fn draw(
     exec: &mut Executor,
     requests: &mut Vec<UiRequest>,
     pointer: Vec2,
+    view: Option<ViewInfo>,
 ) -> PopupResult {
-    let mut host = Host { doc, exec, requests, pointer };
+    let mut host = Host { doc, exec, requests, pointer, view };
     if let Popup::Context(menu) = popup {
         return draw_context(ui, menu, window, &mut host);
     }
@@ -366,6 +369,7 @@ fn draw_context(ui: &mut Ui, menu: &mut ContextMenu, window: Rect, host: &mut Ho
                     if apply || (changed && *applied) {
                         let mut ctx = Ctx::new(host.doc);
                         ctx.pointer = host.pointer;
+                        ctx.view = host.view;
                         let ok = if *applied && !apply {
                             match host.exec.last_step_props() {
                                 Some((id, step_props)) if id == op.as_str() => {
