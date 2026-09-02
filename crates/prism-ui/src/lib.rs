@@ -20,13 +20,15 @@ pub mod screen;
 pub mod shell;
 pub mod state;
 pub mod theme;
+pub mod titlebar;
 pub mod ui;
 pub mod widgets;
 
 pub use event::{Event, Key, Modifiers, MouseButton, WheelDelta};
 pub use id::WidgetId;
 pub use screen::{Area, AreaId, Axis, Screen};
-pub use shell::{Shell, ShellOutput};
+pub use shell::{Shell, ShellOutput, WindowState};
+pub use titlebar::{ResizeEdge, WindowCommand};
 pub use state::{CursorIcon, UiState};
 pub use theme::{Metrics, Theme};
 pub use ui::{Response, Sense, Ui};

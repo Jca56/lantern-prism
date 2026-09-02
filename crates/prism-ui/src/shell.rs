@@ -12,6 +12,7 @@ use crate::id::WidgetId;
 use crate::screen::{AreaId, Axis, Screen};
 use crate::state::{CursorIcon, UiState};
 use crate::theme::Metrics;
+use crate::titlebar::WindowCommand;
 use crate::ui::{FILL, Ui};
 
 /// What the app needs to know after a rebuild.
@@ -22,6 +23,15 @@ pub struct ShellOutput {
     pub rebuild_again: bool,
     /// Background to clear the window with.
     pub clear: prism_math::Color,
+    /// Something the title bar asked the window system to do.
+    pub window_command: Option<WindowCommand>,
+}
+
+/// Facts about the window the shell cannot know on its own.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WindowState {
+    pub maximized: bool,
+    pub focused: bool,
 }
 
 enum Action {
@@ -65,12 +75,21 @@ impl Shell {
         events: &[Event],
         window: Rect,
         window_scale: f64,
+        ws: WindowState,
         text: &mut TextEngine,
         draw: &mut DrawList,
     ) -> ShellOutput {
         let theme = self.prefs.theme.clone();
         let m = self.metrics(window_scale);
         self.state.begin_frame(events, m.widget_h);
+
+        // Resize grabs along the undecorated edges come before everything.
+        let mut window_command = self.resize_edges(window, m, ws);
+        let edge_cursor = self.state.cursor_icon;
+        // Our own title bar; the areas get what is left.
+        let (area_rect, title_cmd) = self.title_bar(draw, text, &theme, m, window, ws);
+        window_command = window_command.or(title_cmd);
+        let window = area_rect;
         self.screen.layout(window, m.header_h, m.sep);
 
         // ---- separators -------------------------------------------------
@@ -200,11 +219,8 @@ impl Shell {
         }
 
         self.state.end_frame();
-        ShellOutput {
-            cursor: sep_cursor.unwrap_or(self.state.cursor_icon),
-            rebuild_again: self.state.request_rebuild,
-            clear: theme.bg,
-        }
+        let cursor = if edge_cursor != CursorIcon::Default { edge_cursor } else { sep_cursor.unwrap_or(self.state.cursor_icon) };
+        ShellOutput { cursor, rebuild_again: self.state.request_rebuild, clear: theme.bg, window_command }
     }
 }
 

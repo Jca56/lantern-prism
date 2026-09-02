@@ -30,6 +30,8 @@ props! {
         pub selection: Color = Color::hex(0x4A4A4A) => { id: 12 },
         /// Border of the area that has keyboard focus.
         pub focus: Color = Color::hex(0xC8C8C8) => { id: 13 },
+        /// The close button while hovered.
+        pub close: Color = Color::hex(0xB03A3A) => { id: 14 },
 
         /// Body text size.
         pub text_size: f64 = 25.0 => { id: 20, hard: 10.0..=80.0, step: 5.0, subtype: Pixels },
@@ -125,6 +127,6 @@ mod tests {
         let info = Theme::info();
         assert_eq!(info.field("accent").unwrap().id, 10);
         assert!(info.field("text_size").unwrap().hard.is_some());
-        assert_eq!(info.fields.len(), 23);
+        assert_eq!(info.fields.len(), 24);
     }
 }

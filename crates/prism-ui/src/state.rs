@@ -18,6 +18,8 @@ pub enum CursorIcon {
     Text,
     EwResize,
     NsResize,
+    NeswResize,
+    NwseResize,
     Grabbing,
 }
 

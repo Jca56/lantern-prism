@@ -8,7 +8,7 @@ use prism_math::{Rect, Vec2};
 use prism_render::wgpu;
 use prism_render::{DrawList, Gpu, Pass2d, RenderGraph, SurfaceTarget, TexturePool};
 use prism_text::TextEngine;
-use prism_ui::{CursorIcon, Event, Modifiers, Shell};
+use prism_ui::{CursorIcon, Event, Modifiers, ResizeEdge, Shell, WindowCommand, WindowState};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
@@ -40,6 +40,8 @@ pub struct App {
     scale: f64,
     /// Something happened; rebuild before the loop goes back to sleep.
     dirty: bool,
+    focused: bool,
+    quit: bool,
 }
 
 impl App {
@@ -57,12 +59,15 @@ impl App {
             pointer: Vec2::ZERO,
             scale: 1.0,
             dirty: true,
+            focused: true,
+            quit: false,
         }
     }
 
     fn init_gfx(&mut self, event_loop: &ActiveEventLoop) {
         let attrs = Window::default_attributes()
             .with_title("Prism")
+            .with_decorations(false)
             .with_inner_size(LogicalSize::new(1600.0, 1000.0));
         let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
         self.scale = window.scale_factor();
@@ -94,12 +99,15 @@ impl App {
         let window_rect = Rect::from_min_size(Vec2::ZERO, Vec2::new(size[0] as f64, size[1] as f64));
         let events = std::mem::take(&mut self.events);
 
+        let ws = WindowState { maximized: gfx.window.is_maximized(), focused: self.focused };
         let mut out = None;
         let mut evs: &[Event] = &events;
+        let mut command = None;
         for _ in 0..MAX_REBUILDS {
             self.draw.clear();
-            let o = self.shell.frame(evs, window_rect, self.scale, &mut self.text, &mut self.draw);
+            let o = self.shell.frame(evs, window_rect, self.scale, ws, &mut self.text, &mut self.draw);
             let again = o.rebuild_again;
+            command = command.or(o.window_command);
             out = Some(o);
             evs = &[];
             if !again {
@@ -111,6 +119,18 @@ impl App {
         if out.cursor != gfx.cursor {
             gfx.cursor = out.cursor;
             gfx.window.set_cursor(cursor_icon(out.cursor));
+        }
+        match command {
+            Some(WindowCommand::Drag) => {
+                let _ = gfx.window.drag_window();
+            }
+            Some(WindowCommand::Minimize) => gfx.window.set_minimized(true),
+            Some(WindowCommand::ToggleMaximize) => gfx.window.set_maximized(!gfx.window.is_maximized()),
+            Some(WindowCommand::Close) => self.quit = true,
+            Some(WindowCommand::Resize(edge)) => {
+                let _ = gfx.window.drag_resize_window(resize_direction(edge));
+            }
+            None => {}
         }
 
         let Some(frame) = gfx.surface.acquire(&gfx.gpu) else {
@@ -144,7 +164,23 @@ fn cursor_icon(c: CursorIcon) -> winit::window::CursorIcon {
         CursorIcon::Text => W::Text,
         CursorIcon::EwResize => W::EwResize,
         CursorIcon::NsResize => W::NsResize,
+        CursorIcon::NeswResize => W::NeswResize,
+        CursorIcon::NwseResize => W::NwseResize,
         CursorIcon::Grabbing => W::Grabbing,
+    }
+}
+
+fn resize_direction(e: ResizeEdge) -> winit::window::ResizeDirection {
+    use winit::window::ResizeDirection as R;
+    match e {
+        ResizeEdge::North => R::North,
+        ResizeEdge::South => R::South,
+        ResizeEdge::East => R::East,
+        ResizeEdge::West => R::West,
+        ResizeEdge::NorthEast => R::NorthEast,
+        ResizeEdge::NorthWest => R::NorthWest,
+        ResizeEdge::SouthEast => R::SouthEast,
+        ResizeEdge::SouthWest => R::SouthWest,
     }
 }
 
@@ -173,7 +209,13 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.scale = scale_factor,
-            WindowEvent::RedrawRequested => self.render(),
+            WindowEvent::Focused(f) => self.focused = f,
+            WindowEvent::RedrawRequested => {
+                self.render();
+                if self.quit {
+                    event_loop.exit();
+                }
+            }
             _ => {}
         }
     }
