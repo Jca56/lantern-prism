@@ -142,6 +142,8 @@ impl KeyConfig {
         k.bind(CTX_WINDOW, KeyItem::new(Trigger::key(Space, ctrl), "wm.palette"));
         k.bind(CTX_WINDOW, KeyItem::new(Trigger::key(Home, none), "view3d.frame_all"));
         k.bind(CTX_WINDOW, KeyItem::new(Trigger::key(Char('.'), none), "view3d.frame_selected"));
+        // R cycles the transform gizmo (D024: no G/R/S grab keys).
+        k.bind(CTX_WINDOW, KeyItem::new(Trigger::key(Char('r'), none), "view3d.gizmo_cycle"));
         // Object mode.
         k.bind(CTX_OBJECT, KeyItem::new(Trigger::key(Char('a'), shift), "wm.call_menu").with("menu", Value::Str("add".into())));
         k.bind(CTX_OBJECT, KeyItem::new(Trigger::key(Char('x'), none), "object.delete"));

@@ -7,6 +7,7 @@ use prism_doc::{DataKind, Doc, ObjectMode, SelectMode};
 use prism_math::Vec2;
 use prism_ops::Executor;
 use prism_props::{Reflect, Value};
+use prism_viewport::GizmoMode;
 
 use crate::icons::Icon;
 
@@ -102,14 +103,26 @@ fn view_items() -> Vec<Item> {
     ]
 }
 
-/// The view tools every viewport menu carries.
-fn view_tools(shading_wire: bool, grid: bool) -> Vec<Tool> {
-    vec![
-        tool(Icon::Solid, !shading_wire, "view3d.shading", vec![("wire", Value::Bool(false))]),
-        tool(Icon::Wire, shading_wire, "view3d.shading", vec![("wire", Value::Bool(true))]),
-        tool(Icon::Grid, grid, "view3d.toggle_grid", vec![]),
+/// The view tools every viewport menu carries: which gizmo, then shading.
+fn view_tools(view: ViewFlags) -> Vec<Tool> {
+    let mut tools: Vec<Tool> = GizmoMode::ALL
+        .iter()
+        .map(|&g| {
+            let icon = match g {
+                GizmoMode::Move => Icon::Move,
+                GizmoMode::Rotate => Icon::Rotate,
+                GizmoMode::Scale => Icon::Scale,
+            };
+            tool(icon, view.gizmo == g, "view3d.gizmo", vec![("mode", Value::Enum(g.index() as i64))])
+        })
+        .collect();
+    tools.extend([
+        tool(Icon::Solid, !view.wire, "view3d.shading", vec![("wire", Value::Bool(false))]),
+        tool(Icon::Wire, view.wire, "view3d.shading", vec![("wire", Value::Bool(true))]),
+        tool(Icon::Grid, view.grid, "view3d.toggle_grid", vec![]),
         tool(Icon::Frame, false, "view3d.frame_all", vec![]),
-    ]
+    ]);
+    tools
 }
 
 /// Viewport display state the menu reflects in its tool strip.
@@ -117,11 +130,12 @@ fn view_tools(shading_wire: bool, grid: bool) -> Vec<Tool> {
 pub struct ViewFlags {
     pub wire: bool,
     pub grid: bool,
+    pub gizmo: GizmoMode,
 }
 
 impl ContextMenu {
     pub fn build(context: MenuContext, doc: &Doc, exec: &Executor, pos: Vec2, view: ViewFlags) -> ContextMenu {
-        let mut tools = view_tools(view.wire, view.grid);
+        let mut tools = view_tools(view);
         let (title, tabs, width) = match context {
             MenuContext::Scene => {
                 let select = vec![

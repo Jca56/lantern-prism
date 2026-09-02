@@ -16,6 +16,9 @@ pub enum Icon {
     EditMode,
     Plus,
     Camera,
+    Move,
+    Rotate,
+    Scale,
 }
 
 pub fn draw(d: &mut DrawList, rect: Rect, icon: Icon, color: Color, stroke: f64) {
@@ -80,6 +83,37 @@ pub fn draw(d: &mut DrawList, rect: Rect, icon: Icon, color: Color, stroke: f64)
         Icon::Plus => {
             d.line(p(-1.0, 0.0), p(1.0, 0.0), stroke, color);
             d.line(p(0.0, -1.0), p(0.0, 1.0), stroke, color);
+        }
+        Icon::Move => {
+            // Four-way arrows.
+            let h = s * 0.45;
+            for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+                let tip = p(dx, dy);
+                d.line(c, tip, stroke, color);
+                let back = tip - Vec2::new(dx, dy) * h;
+                let side = Vec2::new(dy, dx) * h * 0.8;
+                d.line(tip, back + side, stroke, color);
+                d.line(tip, back - side, stroke, color);
+            }
+        }
+        Icon::Rotate => {
+            // Three quarters of a ring, ending in an arrowhead.
+            let r = s * 0.95;
+            let (a0, a1) = (-0.3f64, 4.4f64);
+            let pts: Vec<Vec2> = (0..=24).map(|i| c + Vec2::from_angle(a0 + (a1 - a0) * i as f64 / 24.0) * r).collect();
+            d.polyline(&pts, stroke, color, false);
+            let end = pts[24];
+            let tangent = Vec2::from_angle(a1 + core::f64::consts::FRAC_PI_2);
+            let h = s * 0.55;
+            d.line(end, end - tangent * h + tangent.perp() * h * 0.7, stroke, color);
+            d.line(end, end - tangent * h - tangent.perp() * h * 0.7, stroke, color);
+        }
+        Icon::Scale => {
+            // A small square growing toward a corner bracket.
+            d.stroke_rect(Rect::new(p(-1.0, 0.0), p(0.0, 1.0)), stroke, stroke, color);
+            d.line(p(-0.2, 0.2), p(0.9, -0.9), stroke, color);
+            d.line(p(0.9, -0.9), p(0.1, -0.9), stroke, color);
+            d.line(p(0.9, -0.9), p(0.9, -0.1), stroke, color);
         }
         Icon::Camera => {
             let body = Rect::from_center_size(p(-0.2, 0.1), Vec2::new(s * 1.6, s * 1.1));

@@ -4,9 +4,9 @@
 use prism_doc::{ObjectMode, SelectMode};
 use prism_math::{Color, Rect, Vec2};
 use prism_ops::{UiRequest, ViewInfo};
-use prism_viewport::{Camera, PickMode, PickRequest, Shading, ViewColors, ViewPreset, ViewportRequest};
+use prism_viewport::{Camera, GizmoMode, PickMode, PickRequest, Shading, ViewColors, ViewPreset, ViewportRequest};
 
-use crate::editors::EditorCtx;
+use crate::editors::{EditorCtx, gizmo};
 use crate::state::CursorIcon;
 use crate::theme::{Metrics, Theme};
 use crate::ui::{Sense, Ui};
@@ -61,6 +61,10 @@ pub fn header(ui: &mut Ui, ctx: &mut EditorCtx) {
     }
     ui.toggle("Wire", &mut vp.overlays.wire);
     ui.toggle("Grid", &mut vp.overlays.grid);
+    let mut gizmo = vp.gizmo.index();
+    if ui.dropdown("gizmo", &mut gizmo, &["Move", "Rotate", "Scale"]) {
+        vp.gizmo = GizmoMode::from_index(gizmo);
+    }
     if let Some(i) = ui.menu_button("View", &["Perspective / Ortho", "Front", "Back", "Right", "Left", "Top", "Bottom", "Frame All", "Frame Selected"]) {
         match i {
             0 => vp.camera.ortho = !vp.camera.ortho,
@@ -80,6 +84,9 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
     let rect = ui.clip();
     let colors = view_colors(ui.theme, &ui.m);
     let mode = pick_mode(ctx);
+
+    // The gizmo gets first claim on a press; a handle drag starts a transform.
+    gizmo::draw(ui, ctx, rect);
     let vp = &mut *ctx.viewport;
 
     // ---- navigation -------------------------------------------------------
@@ -158,7 +165,8 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
         PickMode::Edge => "Edit Mode · Edge",
         PickMode::Face => "Edit Mode · Face",
     };
+    let label = format!("{label} · {}", vp.gizmo.label());
     let style = ui.text_style();
     let pad = ui.m.pad;
-    ui.text_at(label, &style, Vec2::new(rect.min.x + pad * 2.0, rect.min.y + pad), rect.width(), ui.theme.text_dim);
+    ui.text_at(&label, &style, Vec2::new(rect.min.x + pad * 2.0, rect.min.y + pad), rect.width(), ui.theme.text_dim);
 }

@@ -104,6 +104,10 @@ pub enum UiRequest {
     /// Solid or wireframe shading in the active 3D viewport.
     ViewShading { wire: bool },
     ViewToggleGrid,
+    /// Cycle the active viewport's transform gizmo (Move → Rotate → Scale).
+    GizmoCycle,
+    /// Show this gizmo (index into Move, Rotate, Scale).
+    GizmoSet(usize),
     Quit,
 }
 

@@ -68,9 +68,53 @@ impl Operator for ToggleGrid {
     }
 }
 
+props! {
+    pub enum GizmoKind {
+        Move = 0,
+        Rotate = 1,
+        Scale = 2,
+    }
+}
+
+props! {
+    pub struct GizmoProps {
+        pub mode: GizmoKind = GizmoKind::Move => { id: 1 },
+    }
+}
+
+/// Show one transform gizmo in the active viewport (D024).
+pub struct Gizmo;
+impl Operator for Gizmo {
+    const ID: &'static str = "view3d.gizmo";
+    const LABEL: &'static str = "Gizmo";
+    const FLAGS: OpFlags = OpFlags::REGISTER;
+    type Props = GizmoProps;
+    type Modal = ();
+    fn exec(ctx: &mut Ctx, p: &GizmoProps) -> OpResult<Outcome> {
+        ctx.request(UiRequest::GizmoSet(p.mode as usize));
+        Ok(Outcome::Finished)
+    }
+}
+
+/// Next gizmo: Move → Rotate → Scale → Move. Bound to R.
+pub struct GizmoCycle;
+impl Operator for GizmoCycle {
+    const ID: &'static str = "view3d.gizmo_cycle";
+    const LABEL: &'static str = "Cycle Gizmo";
+    const FLAGS: OpFlags = OpFlags::REGISTER;
+    type Props = Empty;
+    type Modal = ();
+    fn exec(ctx: &mut Ctx, _: &Empty) -> OpResult<Outcome> {
+        ctx.request(UiRequest::GizmoCycle);
+        Ok(Outcome::Finished)
+    }
+}
+
 pub fn register(r: &mut Registry) {
     r.register::<FrameAll>();
     r.register::<FrameSelected>();
     r.register::<Shading>();
     r.register::<ToggleGrid>();
+    r.register::<Gizmo>();
+    r.register::<GizmoCycle>();
 }

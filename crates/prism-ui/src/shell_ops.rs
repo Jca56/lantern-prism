@@ -5,7 +5,7 @@
 use prism_doc::Doc;
 use prism_ops::{Ctx, Executor, Flow, UiRequest, ViewInfo};
 use prism_props::Value;
-use prism_viewport::{PickPurpose, PickRequest, PickResult, Shading};
+use prism_viewport::{GizmoMode, PickPurpose, PickRequest, PickResult, Shading, ViewportState};
 
 use crate::context_menu::{ContextMenu, ViewFlags};
 use crate::editors::{EditorKind, run_op, viewport};
@@ -35,7 +35,16 @@ impl Shell {
     pub(crate) fn view_flags_for(&self, area: Option<AreaId>) -> ViewFlags {
         area.or_else(|| self.target_viewport())
             .and_then(|a| self.screen.area(a))
-            .map_or(ViewFlags::default(), |ar| ViewFlags { wire: ar.viewport.shading == Shading::Wire, grid: ar.viewport.overlays.grid })
+            .map_or(ViewFlags::default(), |ar| ViewFlags { wire: ar.viewport.shading == Shading::Wire, grid: ar.viewport.overlays.grid, gizmo: ar.viewport.gizmo })
+    }
+
+    /// Change the target viewport's state, if there is one.
+    fn with_target_viewport(&mut self, f: impl FnOnce(&mut ViewportState)) {
+        if let Some(a) = self.target_viewport()
+            && let Some(area) = self.screen.area_mut(a)
+        {
+            f(&mut area.viewport);
+        }
     }
 
     /// Hand every event of this frame to the running modal operator, with the
@@ -75,26 +84,14 @@ impl Shell {
                 UiRequest::Quit => quit = true,
                 UiRequest::ViewFrame { selected } => {
                     let bounds = prism_viewport::scene_bounds(doc, selected);
-                    if let Some(a) = self.target_viewport()
-                        && let Some(area) = self.screen.area_mut(a)
-                    {
-                        area.viewport.camera.frame(&bounds);
-                    }
+                    self.with_target_viewport(|vp| vp.camera.frame(&bounds));
                 }
                 UiRequest::ViewShading { wire } => {
-                    if let Some(a) = self.target_viewport()
-                        && let Some(area) = self.screen.area_mut(a)
-                    {
-                        area.viewport.shading = if wire { Shading::Wire } else { Shading::Solid };
-                    }
+                    self.with_target_viewport(|vp| vp.shading = if wire { Shading::Wire } else { Shading::Solid });
                 }
-                UiRequest::ViewToggleGrid => {
-                    if let Some(a) = self.target_viewport()
-                        && let Some(area) = self.screen.area_mut(a)
-                    {
-                        area.viewport.overlays.grid = !area.viewport.overlays.grid;
-                    }
-                }
+                UiRequest::ViewToggleGrid => self.with_target_viewport(|vp| vp.overlays.grid = !vp.overlays.grid),
+                UiRequest::GizmoCycle => self.with_target_viewport(|vp| vp.gizmo = vp.gizmo.next()),
+                UiRequest::GizmoSet(i) => self.with_target_viewport(|vp| vp.gizmo = GizmoMode::from_index(i)),
                 UiRequest::Undo | UiRequest::Redo | UiRequest::HistoryClear => {}
             }
             self.state.request_rebuild = true;

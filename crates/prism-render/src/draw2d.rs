@@ -209,6 +209,47 @@ impl DrawList {
         self.push_quad(corners, [[0.0; 2]; 4], color.to_linear().to_gpu(), [0.0; 4], [0.0, MODE_PLAIN, 0.0, 0.0]);
     }
 
+    /// Filled triangle with hard edges.
+    pub fn triangle(&mut self, a: Vec2, b: Vec2, c: Vec2, color: Color) {
+        if color.a <= 0.0 {
+            return;
+        }
+        let col = color.to_linear().to_gpu();
+        let clip = self.clip4();
+        let v = |p: Vec2| Vertex2d { pos: p.to_gpu(), uv: [0.0; 2], color: col, rect: [0.0; 4], params: [0.0, MODE_PLAIN, 0.0, 0.0], clip };
+        self.layers[self.layer].extend_from_slice(&[v(a), v(b), v(c)]);
+    }
+
+    /// Connected segments of `width` with mitred joints (clamped, so sharp
+    /// corners do not spike). `closed` joins the last point back to the first.
+    pub fn polyline(&mut self, pts: &[Vec2], width: f64, color: Color, closed: bool) {
+        let n = pts.len();
+        if n < 2 || color.a <= 0.0 {
+            return;
+        }
+        let hw = width * 0.5;
+        let dir = |i: usize, j: usize| (pts[j % n] - pts[i % n]).normalize_or_zero();
+        // Offset at a point: along the bisector of its two edges, long enough
+        // to meet both offset lines, but never more than twice the half width.
+        let offset = |i: usize| -> Vec2 {
+            let prev = if i == 0 { if closed { dir(n - 1, 0) } else { dir(0, 1) } } else { dir(i - 1, i) };
+            let next = if i + 1 == n { if closed { dir(n - 1, 0) } else { dir(n - 2, n - 1) } } else { dir(i, i + 1) };
+            let bisector = (prev + next).normalize_or(next).perp();
+            let cos_half = bisector.dot(next.perp()).abs().max(0.5);
+            bisector * (hw / cos_half)
+        };
+        let col = color.to_linear().to_gpu();
+        let clip = self.clip4();
+        let v = |p: Vec2| Vertex2d { pos: p.to_gpu(), uv: [0.0; 2], color: col, rect: [0.0; 4], params: [0.0, MODE_PLAIN, 0.0, 0.0], clip };
+        let segs = if closed { n } else { n - 1 };
+        let out = &mut self.layers[self.layer];
+        for i in 0..segs {
+            let (a, b) = (pts[i], pts[(i + 1) % n]);
+            let (oa, ob) = (offset(i), offset((i + 1) % n));
+            out.extend_from_slice(&[v(a + oa), v(a - oa), v(b - ob), v(a + oa), v(b - ob), v(b + ob)]);
+        }
+    }
+
     /// Horizontal or vertical 1px-style separator, snapped to pixels.
     pub fn hline(&mut self, x0: f64, x1: f64, y: f64, width: f64, color: Color) {
         self.rect(Rect::from_xywh(x0, y, x1 - x0, width), color);

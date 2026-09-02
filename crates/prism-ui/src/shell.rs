@@ -125,11 +125,13 @@ impl Shell {
         let mut picks: Vec<PickRequest> = Vec::new();
         let mut context_menu: Option<MenuContext> = None;
 
-        // A running modal operator owns the buttons and keys; the UI still
-        // sees motion (hover, cursor) and the middle button and wheel, so the
-        // view can be navigated mid-transform.
+        // A running modal operator owns button presses and keys; the UI still
+        // sees motion (hover, cursor), releases (so a drag that started a
+        // modal settles), and the middle button and wheel, so the view can be
+        // navigated mid-transform.
         let modal = exec.is_modal();
-        let owned_by_modal = |e: &Event| matches!(e, Event::Button { button: MouseButton::Left | MouseButton::Right, .. } | Event::Key { .. } | Event::Text(_));
+        let owned_by_modal =
+            |e: &Event| matches!(e, Event::Button { button: MouseButton::Left | MouseButton::Right, pressed: true, .. } | Event::Key { .. } | Event::Text(_));
         let ui_events: Vec<Event> = if modal { events.iter().filter(|e| !owned_by_modal(e)).cloned().collect() } else { Vec::new() };
         self.state.begin_frame(if modal { &ui_events } else { events }, m.widget_h);
         let pointer = self.state.pointer;

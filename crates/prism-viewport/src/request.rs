@@ -37,6 +37,53 @@ pub enum Nav {
     Pan,
 }
 
+/// Which transform gizmo a viewport shows (D024). R cycles through them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum GizmoMode {
+    #[default]
+    Move,
+    Rotate,
+    Scale,
+}
+
+impl GizmoMode {
+    pub const ALL: [GizmoMode; 3] = [GizmoMode::Move, GizmoMode::Rotate, GizmoMode::Scale];
+
+    pub fn next(self) -> Self {
+        match self {
+            GizmoMode::Move => GizmoMode::Rotate,
+            GizmoMode::Rotate => GizmoMode::Scale,
+            GizmoMode::Scale => GizmoMode::Move,
+        }
+    }
+
+    pub fn index(self) -> usize {
+        Self::ALL.iter().position(|m| *m == self).unwrap_or(0)
+    }
+
+    pub fn from_index(i: usize) -> Self {
+        Self::ALL.get(i).copied().unwrap_or_default()
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            GizmoMode::Move => "Move",
+            GizmoMode::Rotate => "Rotate",
+            GizmoMode::Scale => "Scale",
+        }
+    }
+}
+
+/// One grabbable part of the gizmo: a world axis, or the free handle in the
+/// middle (view plane / view axis / uniform).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GizmoHandle {
+    Free,
+    X,
+    Y,
+    Z,
+}
+
 /// Per-area viewport state. Lives on the area, so every viewport has its own.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct ViewportState {
@@ -44,6 +91,9 @@ pub struct ViewportState {
     pub shading: Shading,
     pub overlays: Overlays,
     pub nav: Nav,
+    pub gizmo: GizmoMode,
+    /// The handle a drag started from, while its transform runs.
+    pub gizmo_drag: Option<GizmoHandle>,
 }
 
 /// World bounds of the scene, or of the selected objects only.

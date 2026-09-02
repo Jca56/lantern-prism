@@ -231,6 +231,12 @@ impl TransformModal {
     }
 }
 
+/// Where a transform of the current selection would pivot, in world space:
+/// what the gizmo is drawn around. `None` when nothing is selected.
+pub fn pivot(doc: &prism_doc::Doc) -> Option<Vec3> {
+    Targets::gather(doc).map(|t| t.pivot())
+}
+
 fn cancelled(ctx: &mut Ctx, label: &str, why: &str) -> OpResult<Flow> {
     ctx.report(format!("{label}: {why}"));
     Ok(Flow::Cancelled)

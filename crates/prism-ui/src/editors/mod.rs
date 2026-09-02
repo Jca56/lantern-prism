@@ -1,6 +1,7 @@
 //! Editor types an area can host.
 
 pub mod gallery;
+pub mod gizmo;
 pub mod outliner;
 pub mod prefs;
 pub mod properties;
