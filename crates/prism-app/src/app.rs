@@ -1,22 +1,23 @@
-//! The winit application: window, GPU wiring, event translation, one frame.
+//! The winit application: window, GPU wiring, event translation, and the
+//! rebuild → draw → present cycle. Nothing here knows what a widget is.
 
 use std::sync::Arc;
 
 use prism_core::{log_error, log_info, log_trace};
-use prism_math::{Color, Vec2};
+use prism_math::{Rect, Vec2};
 use prism_render::wgpu;
 use prism_render::{DrawList, Gpu, Pass2d, RenderGraph, SurfaceTarget, TexturePool};
 use prism_text::TextEngine;
-use prism_ui::{Event, Modifiers};
+use prism_ui::{CursorIcon, Event, Modifiers, Shell};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
-/// Background color for the whole window. Placeholder until the palette is
-/// decided (docs/DECISIONS.md, open questions).
-pub const BACKGROUND: Color = Color::hex(0x141414);
+/// A popup closing or a value committing may ask for one more rebuild; this
+/// caps how many happen back to back before we present.
+const MAX_REBUILDS: usize = 4;
 
 struct Gfx {
     window: Arc<Window>,
@@ -24,17 +25,21 @@ struct Gfx {
     surface: SurfaceTarget,
     pass2d: Pass2d,
     pool: TexturePool,
+    cursor: CursorIcon,
 }
 
 pub struct App {
     gfx: Option<Gfx>,
     text: TextEngine,
     draw: DrawList,
-    /// Events since the last frame, in order. Phase 2's UI consumes these.
+    shell: Shell,
+    /// Events since the last rebuild, in order.
     events: Vec<Event>,
     mods: Modifiers,
     pointer: Vec2,
     scale: f64,
+    /// Something happened; rebuild before the loop goes back to sleep.
+    dirty: bool,
 }
 
 impl App {
@@ -46,10 +51,12 @@ impl App {
             gfx: None,
             text,
             draw: DrawList::new(),
+            shell: Shell::new(),
             events: Vec::new(),
             mods: Modifiers::NONE,
             pointer: Vec2::ZERO,
             scale: 1.0,
+            dirty: true,
         }
     }
 
@@ -74,16 +81,37 @@ impl App {
         let surface = SurfaceTarget::new(&gpu, surface, size.width, size.height);
         let pass2d = Pass2d::new(&gpu, surface.format(), self.text.atlas());
         log_info!("window: {}x{} @ {:.2}x", size.width, size.height, self.scale);
-        self.gfx = Some(Gfx { window, gpu, surface, pass2d, pool: TexturePool::new() });
+        self.gfx = Some(Gfx { window, gpu, surface, pass2d, pool: TexturePool::new(), cursor: CursorIcon::Default });
     }
 
+    /// Rebuild the UI from the pending events (possibly more than once),
+    /// then draw and present.
     fn render(&mut self) {
         let Some(gfx) = self.gfx.as_mut() else {
             return;
         };
         let size = gfx.surface.size();
-        self.draw.clear();
-        demo::build(&mut self.draw, &mut self.text, size, self.scale);
+        let window_rect = Rect::from_min_size(Vec2::ZERO, Vec2::new(size[0] as f64, size[1] as f64));
+        let events = std::mem::take(&mut self.events);
+
+        let mut out = None;
+        let mut evs: &[Event] = &events;
+        for _ in 0..MAX_REBUILDS {
+            self.draw.clear();
+            let o = self.shell.frame(evs, window_rect, self.scale, &mut self.text, &mut self.draw);
+            let again = o.rebuild_again;
+            out = Some(o);
+            evs = &[];
+            if !again {
+                break;
+            }
+        }
+        let out = out.expect("at least one rebuild");
+
+        if out.cursor != gfx.cursor {
+            gfx.cursor = out.cursor;
+            gfx.window.set_cursor(cursor_icon(out.cursor));
+        }
 
         let Some(frame) = gfx.surface.acquire(&gfx.gpu) else {
             gfx.window.request_redraw();
@@ -96,7 +124,7 @@ impl App {
         let mut graph = RenderGraph::new();
         let backbuffer = graph.import(&view);
         graph.add_node("ui", &[], &[backbuffer], move |gpu, enc, views| {
-            pass2d.draw(gpu, enc, views.get(backbuffer), size, draw, text.atlas_mut(), Some(BACKGROUND));
+            pass2d.draw(gpu, enc, views.get(backbuffer), size, draw, text.atlas_mut(), Some(out.clear));
         });
         graph.execute(&gfx.gpu, &mut gfx.pool, &mut encoder);
         gfx.pool.end_frame();
@@ -108,25 +136,33 @@ impl App {
     }
 }
 
-use crate::demo;
+fn cursor_icon(c: CursorIcon) -> winit::window::CursorIcon {
+    use winit::window::CursorIcon as W;
+    match c {
+        CursorIcon::Default => W::Default,
+        CursorIcon::Pointer => W::Pointer,
+        CursorIcon::Text => W::Text,
+        CursorIcon::EwResize => W::EwResize,
+        CursorIcon::NsResize => W::NsResize,
+        CursorIcon::Grabbing => W::Grabbing,
+    }
+}
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.gfx.is_none() {
             self.init_gfx(event_loop);
+            self.dirty = true;
         }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         if let Some(ev) = crate::translate::window_event(&event, &mut self.mods, &mut self.pointer) {
-            let redraw = ev.wants_redraw();
             self.events.push(ev);
             if let Some(text) = crate::translate::key_text(&event) {
                 self.events.push(text);
             }
-            if redraw && let Some(g) = &self.gfx {
-                g.window.request_redraw();
-            }
+            self.dirty = true;
         }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -137,11 +173,15 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => self.scale = scale_factor,
-            WindowEvent::RedrawRequested => {
-                self.events.clear();
-                self.render();
-            }
+            WindowEvent::RedrawRequested => self.render(),
             _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if self.dirty && let Some(g) = &self.gfx {
+            self.dirty = false;
+            g.window.request_redraw();
         }
     }
 }

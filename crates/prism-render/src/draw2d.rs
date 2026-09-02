@@ -77,6 +77,11 @@ impl DrawList {
         self.clips.push(r);
     }
 
+    /// Clip to `r` regardless of the enclosing clips (popups escape their region).
+    pub fn push_clip_absolute(&mut self, r: Rect) {
+        self.clips.push(r);
+    }
+
     pub fn pop_clip(&mut self) {
         self.clips.pop();
     }

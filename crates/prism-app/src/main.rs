@@ -1,7 +1,6 @@
 //! Prism. See `docs/ARCHITECTURE.md`.
 
 mod app;
-mod demo;
 mod translate;
 
 use winit::event_loop::{ControlFlow, EventLoop};
