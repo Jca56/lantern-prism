@@ -156,6 +156,7 @@ fn needs_a_view_and_a_selection() {
     let mut doc = Doc::starter();
     let mut ex = Executor::with_builtins();
     let mut c = Ctx::new(&mut doc);
+    ex.run_with("object.select_all", &[("action", Value::Enum(2))], &mut c).unwrap();
     assert!(!ex.registry.get("transform.translate").unwrap().poll(&c), "nothing selected");
     let cube = c.doc.scene_objects()[0];
     ex.run_with("object.select", &[("id", Value::Id(cube))], &mut c).unwrap();

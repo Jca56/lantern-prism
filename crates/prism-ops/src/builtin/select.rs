@@ -262,6 +262,8 @@ mod tests {
         let mut doc = Doc::starter();
         let objs = doc.scene_objects();
         let (cube, light) = (objs[0], objs[1]);
+        assert!(select_objects(&mut doc, &[], false, false), "the starter cube begins selected; clear it");
+        assert!(doc.selected_objects().is_empty());
         assert!(select_objects(&mut doc, &[cube], false, false));
         assert!(doc.objects.get(cube).unwrap().selected && doc.active_object_id() == cube);
         assert!(!select_objects(&mut doc, &[cube], false, false), "nothing changed");

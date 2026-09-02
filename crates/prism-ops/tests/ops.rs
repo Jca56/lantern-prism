@@ -34,8 +34,11 @@ fn add_undo_redo() {
 #[test]
 fn errors_roll_back_and_poll_gates() {
     let (mut doc, mut ex) = setup();
+    // Nothing selected (the starter cube begins selected): delete polls false.
+    for id in doc.scene_objects() {
+        doc.objects.get_mut(id).unwrap().selected = false;
+    }
     let mut ctx = Ctx::new(&mut doc);
-    // Nothing selected: delete polls false.
     assert!(matches!(ex.run("object.delete", None, &mut ctx), Err(OpError::Poll(_))));
     assert!(matches!(ex.run("nope.nothing", None, &mut ctx), Err(OpError::Unknown(_))));
     // Selecting a bogus id fails and leaves the document untouched.
@@ -157,7 +160,7 @@ fn modal_lifecycle() {
     }
     assert_eq!(ex.modal_event(&mut ctx, &start).unwrap().unwrap(), Flow::Finished);
     assert!(!ex.is_modal());
-    assert_eq!(doc.active_object().unwrap().location.x, 7.0 + 3.0, "camera starts at x=7");
+    assert_eq!(doc.active_object().unwrap().location.x, 3.0, "the starter cube is active and starts at x=0");
     assert_eq!(ex.history.len(), 1, "one step for the whole modal run");
     // Cancel restores the snapshot from before invoke.
     let mut ctx = Ctx::new(&mut doc);
@@ -165,7 +168,7 @@ fn modal_lifecycle() {
     ex.modal_event(&mut ctx, &start);
     let esc = Event::Key { key: Key::Escape, pressed: true, repeat: false, mods: Modifiers::NONE };
     assert_eq!(ex.modal_event(&mut ctx, &esc).unwrap().unwrap(), Flow::Cancelled);
-    assert_eq!(doc.active_object().unwrap().location.x, 10.0);
+    assert_eq!(doc.active_object().unwrap().location.x, 3.0);
     assert_eq!(ex.history.len(), 1);
 }
 

@@ -62,7 +62,7 @@ impl Doc {
     pub fn starter() -> Self {
         let mut doc = Self::new();
         let mesh = doc.add_mesh("Cube", prism_mesh::primitives::cube(2.0));
-        doc.add_object("Cube", DataKind::Mesh, mesh);
+        let cube = doc.add_object("Cube", DataKind::Mesh, mesh);
         let light = doc.add_light("Light");
         let lo = doc.add_object("Light", DataKind::Light, light);
         doc.objects.get_mut(lo).expect("just added").location = prism_math::Vec3::new(4.0, 6.0, 3.0);
@@ -72,9 +72,15 @@ impl Doc {
             o.location = prism_math::Vec3::new(7.0, 5.0, 7.0);
             o.rotation = prism_math::Vec3::new(-0.45, 0.785, 0.0);
         }
+        // The cube starts selected and active, so Tab, the gizmo and the
+        // Edit button work from the first frame.
+        if let Some(o) = doc.objects.get_mut(cube) {
+            o.selected = true;
+        }
         let scene_id = doc.active_scene;
         if let Some(s) = doc.scenes.get_mut(scene_id) {
             s.camera = co;
+            s.active_object = cube;
         }
         doc
     }
@@ -287,7 +293,8 @@ mod tests {
         let cube = doc.scene_objects()[0];
         assert_eq!(doc.objects.get(cube).unwrap().name, "Cube");
         assert_eq!(doc.object_mesh(cube).unwrap().mesh.face_count(), 6);
-        assert_eq!(doc.active_object().unwrap().name, "Camera");
+        assert_eq!(doc.active_object().unwrap().name, "Cube", "the cube starts active, so edit mode is one Tab away");
+        assert!(doc.objects.get(cube).unwrap().selected);
         assert!(doc.scene().unwrap().camera.is_some());
     }
 
