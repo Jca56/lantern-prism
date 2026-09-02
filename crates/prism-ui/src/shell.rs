@@ -37,8 +37,6 @@ pub struct ShellOutput {
     pub viewports: Vec<ViewportRequest>,
     /// Clicks to resolve with the renderer, then feed to `apply_pick`.
     pub picks: Vec<PickRequest>,
-    /// Redraw after this long even without input (a tooltip is due).
-    pub wake_in: Option<std::time::Duration>,
 }
 
 /// Facts about the window the shell cannot know on its own.
@@ -404,7 +402,6 @@ impl Shell {
         } else {
             sep_cursor.unwrap_or(self.state.cursor_icon)
         };
-        let wake_in = self.state.wake_in.take();
-        ShellOutput { cursor, rebuild_again: self.state.request_rebuild, clear: theme.bg, window_command, quit, viewports, picks, wake_in }
+        ShellOutput { cursor, rebuild_again: self.state.request_rebuild, clear: theme.bg, window_command, quit, viewports, picks }
     }
 }

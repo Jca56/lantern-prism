@@ -331,11 +331,12 @@ but nothing is *only* reachable by key.
 is one more door into the operator registry (D007), so it costs no new
 verbs, only a `MenuContext → ContextMenu` builder per situation.
 
-*Amended 2026-09-02 (Alva, later that day):* an **Object | Edit bar** sits
-horizontally above the panel (lit blue / gold — the mode colour also
-outlines the menu and the focused area); the strip down the left holds the
-select modes in edit mode, then the gizmo. Every icon button carries a
-tooltip (350 ms hover; the app wakes on a timer to show it) and every
+*Amended 2026-09-02 (Alva, later that day):* **Object | Edit** are two
+square icon buttons in a row above the panel's left edge (lit blue / gold —
+the mode colour also outlines the menu and the focused area); the strip
+down the left starts at the panel's top (the corner stays empty) and holds
+the gizmo, then Vertex / Edge / Face in edit mode. Every icon button has a
+tooltip that shows **only while Alt is held** (help on demand), and every
 button glows on hover. Shading, grid and framing moved to the viewport **header**
 as the same icon buttons; the `+` tool went (the Add tab covers it);
 Dissolve and the normals actions moved to the Properties editor's

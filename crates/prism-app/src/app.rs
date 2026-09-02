@@ -2,7 +2,6 @@
 //! rebuild → draw → present cycle. Nothing here knows what a widget is.
 
 use std::sync::Arc;
-use std::time::Instant;
 
 use prism_core::{log_error, log_info, log_trace};
 use prism_doc::Doc;
@@ -16,7 +15,7 @@ use prism_ui::{CursorIcon, Event, Modifiers, ResizeEdge, Shell, WindowCommand, W
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, ControlFlow};
+use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
 /// A popup closing or a value committing may ask for one more rebuild; this
@@ -47,8 +46,6 @@ pub struct App {
     scale: f64,
     /// Something happened; rebuild before the loop goes back to sleep.
     dirty: bool,
-    /// Redraw at this time even with no input (a tooltip coming due).
-    wake_at: Option<Instant>,
     focused: bool,
     quit: bool,
 }
@@ -70,7 +67,6 @@ impl App {
             pointer: Vec2::ZERO,
             scale: 1.0,
             dirty: true,
-            wake_at: None,
             focused: true,
             quit: false,
         }
@@ -152,7 +148,6 @@ impl App {
             self.dirty = true;
         }
         let out = out.expect("at least one rebuild");
-        self.wake_at = out.wake_in.map(|d| Instant::now() + d);
 
         if out.cursor != gfx.cursor {
             gfx.cursor = out.cursor;
@@ -267,17 +262,7 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        // Sleep until input, or until a timed redraw (tooltips) comes due.
-        match self.wake_at {
-            Some(t) if Instant::now() >= t => {
-                self.wake_at = None;
-                self.dirty = true;
-                event_loop.set_control_flow(ControlFlow::Wait);
-            }
-            Some(t) => event_loop.set_control_flow(ControlFlow::WaitUntil(t)),
-            None => event_loop.set_control_flow(ControlFlow::Wait),
-        }
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if self.dirty && let Some(g) = &self.gfx {
             self.dirty = false;
             g.window.request_redraw();

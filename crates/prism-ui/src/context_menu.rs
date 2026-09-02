@@ -131,7 +131,7 @@ impl ContextMenu {
             MenuContext::Mesh(m) | MenuContext::Element { mesh: m, .. } => doc.scene_objects().into_iter().find(|&id| doc.objects.get(id).is_some_and(|o| o.data == m)),
             MenuContext::Scene => None,
         };
-        let mut tools: Vec<Tool> = Vec::new();
+        let mut tools = gizmo_tools(view);
         let (title, tabs, width) = match context {
             MenuContext::Scene => {
                 let select = vec![
@@ -210,7 +210,6 @@ impl ContextMenu {
                 (title, vec![Tab { label: "Edit".into(), items: edit }, Tab { label: "Select".into(), items: select }], Width::Wide)
             }
         };
-        tools.extend(gizmo_tools(view));
         ContextMenu { context, title, tabs, tab: 0, tools, subject, pos, width, open_sub: None, height: 0.0 }
     }
 
@@ -260,8 +259,9 @@ mod tests {
         let el = ContextMenu::build(MenuContext::Element { mesh: mesh_id, kind: SelectMode::Face }, &doc, &exec, Vec2::ZERO, ViewFlags::default());
         assert!(el.title.starts_with("Face"));
         assert_eq!(el.subject, Some(cube), "the mesh's owner");
-        assert_eq!(el.tools[0].icon, Icon::Vertex, "select modes lead the strip in edit mode");
-        assert!(el.tools[0].active, "vertex mode is the scene default");
+        assert_eq!(el.tools[0].icon, Icon::Move, "gizmo first, then select modes");
+        assert_eq!(el.tools[3].icon, Icon::Vertex);
+        assert!(el.tools[3].active, "vertex mode is the scene default");
         assert!(!el.tabs[0].items.iter().any(|i| matches!(i, Item::OpPanel { .. })), "knobs live in the Properties editor");
         for op in ["mesh.extrude", "mesh.subdivide", "mesh.merge_by_distance"] {
             assert!(el.tabs[0].items.iter().any(|i| matches!(i, Item::Action { op: o, .. } if o == op)), "{op} is a plain action");

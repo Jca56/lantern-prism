@@ -11,6 +11,7 @@ use prism_props::Value;
 use crate::context_menu::{ContextMenu, Item, Width};
 use crate::editors::{record_edit, run_op};
 use crate::event::Key;
+use crate::icons::Icon;
 use crate::state::CursorIcon;
 use crate::ui::{FILL, Sense, Ui};
 
@@ -276,10 +277,11 @@ fn draw_context(ui: &mut Ui, menu: &mut ContextMenu, window: Rect, host: &mut Ho
     let x = menu.pos.x.clamp(min_x, (window.max.x - width).max(min_x));
     let y = menu.pos.y.clamp(min_y, (window.max.y - est_h).max(min_y));
     let panel = Rect::from_min_size(Vec2::new(x, y), Vec2::new(width, est_h));
-    // Object | Edit sit in a bar above the panel; the tool strip runs down the
-    // left from the bar's top, so the two frame the panel like an L.
-    let bar = Rect::from_min_size(Vec2::new(panel.min.x, panel.min.y - m.gap - bar_h), Vec2::new(width, bar_h));
-    let strip = Rect::from_min_size(Vec2::new(panel.min.x - m.gap - strip_w, bar.min.y), Vec2::new(strip_w, strip_h.max(1.0)));
+    // Object | Edit are two icon buttons in a row above the panel's left edge;
+    // the tool strip runs down the left from the panel's top. The corner
+    // between them stays empty.
+    let bar = Rect::from_min_size(Vec2::new(panel.min.x, panel.min.y - m.gap - bar_h), Vec2::new(strip_w * 2.0 + m.gap, bar_h));
+    let strip = Rect::from_min_size(Vec2::new(panel.min.x - m.gap - strip_w, panel.min.y), Vec2::new(strip_w, strip_h.max(1.0)));
     let sub_w = m.px(300.0);
     // The submenu opens beside the panel, on the left when the right is full.
     let sub_x = if panel.max.x + m.gap + sub_w <= window.max.x { panel.max.x + m.gap } else { strip.min.x - m.gap - sub_w };
@@ -442,34 +444,19 @@ fn draw_context(ui: &mut Ui, menu: &mut ContextMenu, window: Rect, host: &mut Ho
         ui.draw.set_layer(2);
     }
 
-    // ---- mode bar: Object | Edit, the active one lit in the mode colour ---------
+    // ---- mode bar: Object | Edit icon buttons, the active one in the mode colour --
     let subject = menu.subject.and_then(|id| host.doc.objects.get(id)).or_else(|| host.doc.active_object());
     let editing = subject.is_some_and(|o| o.mode == ObjectMode::Edit);
     let can_edit = subject.is_some_and(|o| o.kind == DataKind::Mesh);
-    let half = ((bar.width() - m.gap) * 0.5).floor();
-    let style = ui.text_style();
-    let modes = [("Object", false, "Object mode: move, rotate and scale whole objects"), ("Edit", true, "Edit mode: work on the mesh's vertices, edges and faces")];
-    for (i, (label, edit, tip)) in modes.into_iter().enumerate() {
-        let rect = Rect::from_min_size(Vec2::new(bar.min.x + i as f64 * (half + m.gap), bar.min.y), Vec2::new(half, bar.height()));
-        let enabled = !edit || can_edit;
-        let r = ui.interact(ui.id("mode").with_index(i), rect, if enabled { Sense::CLICK } else { Sense::NONE });
-        if r.hovered && enabled {
-            ui.state.cursor_icon = CursorIcon::Pointer;
+    let modes = [(Icon::Object, false, "Object mode: move, rotate and scale whole objects"), (Icon::EditMode, true, "Edit mode: work on the mesh's vertices, edges and faces")];
+    for (i, (icon, edit, tip)) in modes.into_iter().enumerate() {
+        if edit && !can_edit {
+            continue;
         }
+        let rect = Rect::from_min_size(Vec2::new(bar.min.x + i as f64 * (strip_w + m.gap), bar.min.y), Vec2::splat(strip_w));
         let active = editing == edit;
-        let ink = if active {
-            let face = ui.theme.mode_color(edit);
-            if r.hovered {
-                ui.hover_glow(rect, face);
-            }
-            ui.raised(rect, face, r.held);
-            ui.theme.mode_text(edit)
-        } else {
-            ui.button_face(rect, &r);
-            if enabled { ui.theme.text } else { ui.theme.text_dim }
-        };
-        ui.text_centered(label, &style, rect, ink);
-        ui.tooltip(&r, if enabled { tip } else { "Edit mode needs a mesh" });
+        let lit = active.then_some((ui.theme.mode_color(edit), ui.theme.mode_text(edit)));
+        let r = ui.icon_button_in(ui.id("mode").with_index(i), rect, icon, lit, tip);
         if r.clicked && !active {
             host.run("object.mode_set", &[("mode".to_owned(), Value::Enum(edit as i64))]);
             out.refresh = true;
