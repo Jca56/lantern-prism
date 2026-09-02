@@ -1,20 +1,17 @@
 [package]
-name = "prism-ui"
+name = "prism-ops"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Prism UI: input events, screen/area/region layout, immediate-mode widgets, props-driven panels."
+description = "Prism operators: the verb system. Trait, registry, executor, keymaps, built-ins."
 
 [lints]
 workspace = true
 
 [dependencies]
-prism-core.workspace = true
 prism-math.workspace = true
+prism-core.workspace = true
 prism-props.workspace = true
 prism-mesh.workspace = true
 prism-doc.workspace = true
-prism-ops.workspace = true
-prism-text.workspace = true
-prism-render.workspace = true

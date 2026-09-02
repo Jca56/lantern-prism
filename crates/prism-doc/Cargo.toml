@@ -1,0 +1,16 @@
+[package]
+name = "prism-doc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Prism document: datablocks, persistent store, undo history, file format."
+
+[lints]
+workspace = true
+
+[dependencies]
+prism-math.workspace = true
+prism-core.workspace = true
+prism-props.workspace = true
+prism-mesh.workspace = true

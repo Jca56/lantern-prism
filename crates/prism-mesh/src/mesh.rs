@@ -120,6 +120,47 @@ impl Mesh {
         self.verts.attrs.vec3s(V_POSITION)
     }
 
+    /// Addresses of every storage chunk (topology and attributes), for
+    /// memory accounting across snapshots that share structure.
+    pub fn chunk_ptrs(&self, out: &mut std::collections::HashSet<usize>) {
+        fn add<T>(out: &mut std::collections::HashSet<usize>, v: &prism_core::ChunkedVec<T>) {
+            for c in v.chunks() {
+                out.insert(std::sync::Arc::as_ptr(c) as *const u8 as usize);
+            }
+        }
+        fn attrs(out: &mut std::collections::HashSet<usize>, a: &AttributeSet) {
+            for l in a.layers() {
+                match &l.data {
+                    crate::attr::AttrData::Bool(v) => add(out, v),
+                    crate::attr::AttrData::F64(v) => add(out, v),
+                    crate::attr::AttrData::I32(v) => add(out, v),
+                    crate::attr::AttrData::U32(v) => add(out, v),
+                    crate::attr::AttrData::Vec2(v) => add(out, v),
+                    crate::attr::AttrData::Vec3(v) => add(out, v),
+                    crate::attr::AttrData::Vec4(v) => add(out, v),
+                    crate::attr::AttrData::Color(v) => add(out, v),
+                }
+            }
+        }
+        add(out, &self.verts.edge);
+        attrs(out, &self.verts.attrs);
+        add(out, &self.edges.v);
+        add(out, &self.edges.disk);
+        add(out, &self.edges.loop_);
+        attrs(out, &self.edges.attrs);
+        add(out, &self.loops.vert);
+        add(out, &self.loops.edge);
+        add(out, &self.loops.face);
+        add(out, &self.loops.next);
+        add(out, &self.loops.prev);
+        add(out, &self.loops.radial_next);
+        add(out, &self.loops.radial_prev);
+        attrs(out, &self.loops.attrs);
+        add(out, &self.faces.loop_);
+        add(out, &self.faces.len);
+        attrs(out, &self.faces.attrs);
+    }
+
     // ---- vertex ----------------------------------------------------------
 
     /// Any one edge at `v`, or `None` for a loose vertex.

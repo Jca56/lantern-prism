@@ -1,6 +1,7 @@
 //! Region extrude: the selected faces move onto duplicated vertices and the
 //! region boundary grows side quads. Interior geometry that nothing uses any
-//! more is removed. The caller then translates `verts`.
+//! more is removed. A closed region (no boundary edges) keeps its originals
+//! and becomes a second shell. The caller then translates `verts`.
 
 use std::collections::{HashMap, HashSet};
 
@@ -81,8 +82,12 @@ impl Mesh {
             new_faces.push(nf);
             old_faces.push(f);
         }
-        for f in &old_faces {
-            self.kill_face(*f)?;
+        // A closed region (no boundary at all) keeps its original faces:
+        // extruding a whole shell makes a second shell, not a moved copy.
+        if !boundary.is_empty() {
+            for f in &old_faces {
+                self.kill_face(*f)?;
+            }
         }
 
         // Side quads along the boundary, wound to face outward.
