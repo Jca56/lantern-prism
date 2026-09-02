@@ -78,8 +78,8 @@ impl Shell {
             match r {
                 UiRequest::Menu(name) => self.popup = crate::popups::menu(&name, pointer),
                 UiRequest::Palette => self.popup = Some(Popup::Palette { query: String::new(), selected: 0 }),
-                UiRequest::PathDialog { op, save } => {
-                    let text = doc.path.as_ref().map_or_else(|| "untitled.prism".to_owned(), |p| p.display().to_string());
+                UiRequest::PathDialog { op, save, suggest } => {
+                    let text = suggest.unwrap_or_else(|| doc.path.as_ref().map_or_else(|| "untitled.prism".to_owned(), |p| p.display().to_string()));
                     self.popup = Some(Popup::Path { op, save, text });
                 }
                 UiRequest::Quit => quit = true,

@@ -389,6 +389,20 @@ mesh in the scene no longer breaks clicking it.
 is the same copy with a wider row pitch. Select-through in wireframe (X-ray)
 is a later toggle on the same path.
 
+## D026 — OBJ import and export, own parser
+**Status:** Accepted (implemented 2026-09-02; Phase 7 slice 1)
+**Decision:** `prism-doc::obj` reads `v` / `f` (all index forms, negative
+indices, any polygon size) and starts a new mesh at each `o`; faces the
+kernel refuses are counted and skipped, never fatal. Export writes every
+visible mesh object in world space as its own `o` group, positions only.
+`wm.import_obj` / `wm.export_obj` live in the scene menu's **File** tab and
+the palette; `PathDialog` gained a suggested name (the document's path with
+`.obj`). Normals, UVs, materials and `g` groups are ignored for now; glTF is
+the next format when it is needed.
+**Why:** Nothing built in Prism could leave it, and no real mesh could come
+in to exercise picking and transforms at scale. OBJ is the smallest format
+every other tool speaks.
+
 ---
 
 ## Open questions

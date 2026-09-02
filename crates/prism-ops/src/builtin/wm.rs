@@ -62,7 +62,7 @@ impl Operator for Save {
             match &ctx.doc.path {
                 Some(existing) => existing.clone(),
                 None => {
-                    ctx.request(UiRequest::PathDialog { op: Self::ID.into(), save: true });
+                    ctx.request(UiRequest::PathDialog { op: Self::ID.into(), save: true, suggest: None });
                     return Ok(Outcome::Cancelled);
                 }
             }
@@ -85,7 +85,7 @@ impl Operator for SaveAs {
     type Modal = ();
     fn exec(ctx: &mut Ctx, p: &PathProps) -> OpResult<Outcome> {
         if p.path.is_empty() {
-            ctx.request(UiRequest::PathDialog { op: Self::ID.into(), save: true });
+            ctx.request(UiRequest::PathDialog { op: Self::ID.into(), save: true, suggest: None });
             return Ok(Outcome::Cancelled);
         }
         Save::exec(ctx, p)
@@ -101,7 +101,7 @@ impl Operator for Open {
     type Modal = ();
     fn exec(ctx: &mut Ctx, p: &PathProps) -> OpResult<Outcome> {
         if p.path.is_empty() {
-            ctx.request(UiRequest::PathDialog { op: Self::ID.into(), save: false });
+            ctx.request(UiRequest::PathDialog { op: Self::ID.into(), save: false, suggest: None });
             return Ok(Outcome::Cancelled);
         }
         let path = std::path::Path::new(&p.path);

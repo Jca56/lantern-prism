@@ -98,7 +98,8 @@ pub enum UiRequest {
     /// Open the command palette.
     Palette,
     /// Ask for a path, then run `op` with its `path` property set.
-    PathDialog { op: String, save: bool },
+    /// `suggest` pre-fills the field; `None` means the document's own path.
+    PathDialog { op: String, save: bool, suggest: Option<String> },
     /// Frame the scene (or the selection) in the active 3D viewport.
     ViewFrame { selected: bool },
     /// Solid or wireframe shading in the active 3D viewport.

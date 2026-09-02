@@ -101,6 +101,19 @@ fn add_items() -> Vec<Item> {
     ]
 }
 
+/// Files: the document, and OBJ in and out (Phase 7).
+fn file_items() -> Vec<Item> {
+    vec![
+        act("New", "wm.new", vec![]),
+        act("Open…", "wm.open", vec![]),
+        act("Save", "wm.save", vec![]),
+        act("Save As…", "wm.save_as", vec![]),
+        Item::Separator,
+        act("Import OBJ…", "wm.import_obj", vec![]),
+        act("Export OBJ…", "wm.export_obj", vec![]),
+    ]
+}
+
 fn view_items() -> Vec<Item> {
     vec![
         act("Frame All", "view3d.frame_all", vec![]),
@@ -145,6 +158,7 @@ impl ContextMenu {
                         Tab { label: "Add".into(), items: add_items() },
                         Tab { label: "View".into(), items: view_items() },
                         Tab { label: "Select".into(), items: select },
+                        Tab { label: "File".into(), items: file_items() },
                     ],
                     Width::Narrow,
                 )
@@ -237,7 +251,8 @@ mod tests {
         let doc = Doc::starter();
         let exec = Executor::with_builtins();
         let scene = ContextMenu::build(MenuContext::Scene, &doc, &exec, Vec2::ZERO, ViewFlags::default());
-        assert_eq!(scene.tabs.iter().map(|t| t.label.as_str()).collect::<Vec<_>>(), vec!["Add", "View", "Select"]);
+        assert_eq!(scene.tabs.iter().map(|t| t.label.as_str()).collect::<Vec<_>>(), vec!["Add", "View", "Select", "File"]);
+        assert!(scene.tabs[3].items.iter().any(|i| matches!(i, Item::Action { op, .. } if op == "wm.export_obj")));
         assert_eq!(scene.tabs[0].items.len(), 6);
         assert!(!scene.tools.iter().any(|t| t.icon == Icon::Plus), "Add lives in its tab");
         assert!(scene.tools.iter().all(|t| !matches!(t.icon, Icon::Solid | Icon::Wire | Icon::Grid | Icon::Frame)), "view tools moved to the header");

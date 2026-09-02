@@ -67,6 +67,12 @@ impl From<prism_doc::FileError> for OpError {
     }
 }
 
+impl From<prism_doc::ObjError> for OpError {
+    fn from(e: prism_doc::ObjError) -> Self {
+        OpError::Failed(e.to_string())
+    }
+}
+
 pub type OpResult<T> = Result<T, OpError>;
 
 /// One user-facing verb. `exec` is the whole story for most operators;
