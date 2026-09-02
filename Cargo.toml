@@ -4,6 +4,7 @@ members = [
     "crates/prism-math",
     "crates/prism-core",
     "crates/prism-props",
+    "crates/prism-text",
 ]
 
 [workspace.package]
@@ -16,6 +17,7 @@ authors = ["Alva"]
 prism-math = { path = "crates/prism-math" }
 prism-core = { path = "crates/prism-core" }
 prism-props = { path = "crates/prism-props" }
+prism-text = { path = "crates/prism-text" }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"

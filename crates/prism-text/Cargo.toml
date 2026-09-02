@@ -1,0 +1,13 @@
+[package]
+name = "prism-text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Fonts, shaping, layout, rasterization and atlas packing for Prism. GPU-free."
+
+[lints]
+workspace = true
+
+[dependencies]
+prism-core.workspace = true

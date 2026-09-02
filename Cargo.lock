@@ -17,3 +17,10 @@ dependencies = [
  "prism-core",
  "prism-math",
 ]
+
+[[package]]
+name = "prism-text"
+version = "0.1.0"
+dependencies = [
+ "prism-core",
+]
