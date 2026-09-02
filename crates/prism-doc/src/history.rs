@@ -30,6 +30,8 @@ pub struct History {
     /// Number of steps currently applied (0..=steps.len()).
     cursor: usize,
     budget: usize,
+    /// Bumps on every push, undo and redo: a cheap "did anything change".
+    revision: u64,
 }
 
 impl Default for History {
@@ -40,7 +42,7 @@ impl Default for History {
 
 impl History {
     pub fn new(budget: usize) -> Self {
-        Self { steps: Vec::new(), cursor: 0, budget: budget.max(1) }
+        Self { steps: Vec::new(), cursor: 0, budget: budget.max(1), revision: 0 }
     }
 
     pub fn budget(&self) -> usize {
@@ -64,6 +66,10 @@ impl History {
         self.cursor
     }
 
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     pub fn can_undo(&self) -> bool {
         self.cursor > 0
     }
@@ -77,6 +83,7 @@ impl History {
         self.steps.truncate(self.cursor);
         self.steps.push(step);
         self.cursor = self.steps.len();
+        self.revision += 1;
         self.trim();
     }
 
@@ -93,6 +100,7 @@ impl History {
             return None;
         }
         self.cursor -= 1;
+        self.revision += 1;
         Some(self.steps[self.cursor].before.clone())
     }
 
@@ -103,6 +111,7 @@ impl History {
         }
         let doc = self.steps[self.cursor].after.clone();
         self.cursor += 1;
+        self.revision += 1;
         Some(doc)
     }
 
@@ -123,6 +132,7 @@ impl History {
     pub fn clear(&mut self) {
         self.steps.clear();
         self.cursor = 0;
+        self.revision += 1;
     }
 
     /// Memory accounting across every snapshot (both sides of each step).

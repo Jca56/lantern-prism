@@ -252,6 +252,33 @@ literature; against generic layers every link access is a `match`. Speed is
 a side benefit. The doc-level guarantee (one storage mechanism, persistent,
 undoable) is unchanged.
 
+## D021 — Operators never touch the UI; the UI never touches the document directly
+**Status:** Proposed (implemented in Phase 4)
+**Decision:** Three rules that make D007 hold in practice.
+1. **Input vocabulary lives in `prism-ops::input`** (`Event`, `Key`,
+   `Modifiers`, `MouseButton`). Keymaps need it below the UI; the UI
+   re-exports it. `prism-app` translates winit into it and nothing above the
+   app ever sees winit.
+2. **Operators ask, the shell acts.** An operator that needs UI (a menu, the
+   palette, a path, quitting) pushes a `UiRequest` on its `Ctx`. The executor
+   consumes `Undo`/`Redo`/`HistoryClear` itself and hands the rest to the
+   shell, which opens the popup or quits. `wm.call_menu {menu}` is how a
+   hotkey opens the Add menu.
+3. **Direct property edits are undo steps too.** A `props_panel` edit in the
+   Properties editor snapshots the document before the panel runs and, if
+   anything changed, pushes a step labelled after the panel (`op_id =
+   "ui.edit"`). While the pointer is held, consecutive edits with the same
+   label coalesce into one step, so a slider drag is one undo, not sixty.
+   Adjust-last-operation is only offered for real operator steps.
+The executor is transactional: `exec` runs on the live document after an
+O(1) snapshot; on error the snapshot is restored and the error becomes the
+status line. Modal operators keep their pre-invoke snapshot until they finish
+or cancel. Files save from the document as it is (D002 makes that a snapshot
+for free); saving records a history revision so the title bar's dirty mark is
+exact.
+**Why:** Every door into the room (hotkey, menu, panel, palette, gizmo later)
+produces the same kind of history entry and the same rollback behaviour.
+
 ---
 
 ## Open questions

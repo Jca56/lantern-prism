@@ -4,6 +4,8 @@
 use std::sync::Arc;
 
 use prism_core::{log_error, log_info, log_trace};
+use prism_doc::Doc;
+use prism_ops::Executor;
 use prism_math::{Rect, Vec2};
 use prism_render::wgpu;
 use prism_render::{DrawList, Gpu, Pass2d, RenderGraph, SurfaceTarget, TexturePool};
@@ -33,6 +35,8 @@ pub struct App {
     text: TextEngine,
     draw: DrawList,
     shell: Shell,
+    doc: Doc,
+    exec: Executor,
     /// Events since the last rebuild, in order.
     events: Vec<Event>,
     mods: Modifiers,
@@ -54,6 +58,8 @@ impl App {
             text,
             draw: DrawList::new(),
             shell: Shell::new(),
+            doc: Doc::starter(),
+            exec: Executor::with_builtins(),
             events: Vec::new(),
             mods: Modifiers::NONE,
             pointer: Vec2::ZERO,
@@ -105,9 +111,12 @@ impl App {
         let mut command = None;
         for _ in 0..MAX_REBUILDS {
             self.draw.clear();
-            let o = self.shell.frame(evs, window_rect, self.scale, ws, &mut self.text, &mut self.draw);
+            let o = self.shell.frame(evs, window_rect, self.scale, ws, &mut self.doc, &mut self.exec, &mut self.text, &mut self.draw);
             let again = o.rebuild_again;
             command = command.or(o.window_command);
+            if o.quit {
+                self.quit = true;
+            }
             out = Some(o);
             evs = &[];
             if !again {

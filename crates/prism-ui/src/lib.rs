@@ -16,6 +16,7 @@ pub mod editors;
 pub mod event;
 pub mod id;
 pub mod panel;
+pub mod popups;
 pub mod screen;
 pub mod shell;
 pub mod state;

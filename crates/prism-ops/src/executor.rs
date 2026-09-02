@@ -25,6 +25,7 @@ pub struct Executor {
     /// Requests operators made during the last call, for the UI to act on.
     pub requests: Vec<UiRequest>,
     pub last_report: Option<String>,
+    saved_revision: u64,
 }
 
 impl Default for Executor {
@@ -35,7 +36,7 @@ impl Default for Executor {
 
 impl Executor {
     pub fn new(registry: Registry) -> Self {
-        Self { registry, history: History::default(), running: None, requests: Vec::new(), last_report: None }
+        Self { registry, history: History::default(), running: None, requests: Vec::new(), last_report: None, saved_revision: 0 }
     }
 
     /// Every built-in operator registered.
@@ -43,6 +44,15 @@ impl Executor {
         let mut r = Registry::new();
         crate::builtin::register_all(&mut r);
         Self::new(r)
+    }
+
+    /// The document on disk matches the current history position.
+    pub fn mark_saved(&mut self) {
+        self.saved_revision = self.history.revision();
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.history.revision() != self.saved_revision
     }
 
     pub fn is_modal(&self) -> bool {

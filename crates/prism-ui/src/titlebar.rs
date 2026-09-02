@@ -94,6 +94,7 @@ impl Shell {
 
     /// Draw the title bar across the top of `window`. Returns the rect left
     /// for the areas and any window command the user triggered.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn title_bar(
         &mut self,
         draw: &mut DrawList,
@@ -102,6 +103,8 @@ impl Shell {
         m: Metrics,
         window: Rect,
         ws: WindowState,
+        title: &str,
+        status: &str,
     ) -> (Rect, Option<WindowCommand>) {
         let (bar, rest) = window.take_top(m.header_h);
         let mut cmd = None;
@@ -169,7 +172,15 @@ impl Shell {
 
         let title_style = ui.text_style().bold();
         let title_rect = Rect::new(Vec2::new(bar.min.x + m.pad, bar.min.y), Vec2::new(x - m.pad, bar.max.y));
-        ui.text_in_rect("Prism", &title_style, title_rect, if ws.focused { theme.text } else { theme.text_dim });
+        ui.text_in_rect(title, &title_style, title_rect, if ws.focused { theme.text } else { theme.text_dim });
+        if !status.is_empty() {
+            let title_w = ui.measure(title, &title_style);
+            let status_rect = Rect::new(Vec2::new(title_rect.min.x + title_w + m.pad * 3.0, bar.min.y), title_rect.max);
+            if status_rect.width() > m.px(100.0) {
+                let style = ui.text_style();
+                ui.text_right(status, &style, status_rect, theme.text_dim);
+            }
+        }
         ui.finish();
 
         (rest, cmd)

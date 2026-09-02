@@ -1,32 +1,50 @@
-//! Editor types an area can host. Phase 2 ships three: a viewport
-//! placeholder, the widget gallery and Preferences. Phase 4 adds the outliner
-//! and properties; Phase 5 makes the viewport real.
+//! Editor types an area can host.
 
 pub mod gallery;
+pub mod outliner;
 pub mod prefs;
+pub mod properties;
 pub mod viewport;
 
 pub use gallery::GalleryState;
+pub use outliner::OutlinerState;
 pub use prefs::Prefs;
+pub use properties::PropertiesState;
+
+use prism_doc::{Doc, UndoStep};
+use prism_math::Vec2;
+use prism_ops::{Ctx, Executor, OpResult, Outcome, UiRequest};
+use prism_props::Value;
 
 use crate::ui::Ui;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum EditorKind {
     Viewport,
-    Gallery,
+    Outliner,
+    Properties,
     Preferences,
+    Gallery,
     Empty,
 }
 
 impl EditorKind {
-    pub const ALL: &'static [EditorKind] = &[EditorKind::Viewport, EditorKind::Gallery, EditorKind::Preferences, EditorKind::Empty];
+    pub const ALL: &'static [EditorKind] = &[
+        EditorKind::Viewport,
+        EditorKind::Outliner,
+        EditorKind::Properties,
+        EditorKind::Preferences,
+        EditorKind::Gallery,
+        EditorKind::Empty,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             EditorKind::Viewport => "3D Viewport",
-            EditorKind::Gallery => "Widget Gallery",
+            EditorKind::Outliner => "Outliner",
+            EditorKind::Properties => "Properties",
             EditorKind::Preferences => "Preferences",
+            EditorKind::Gallery => "Widget Gallery",
             EditorKind::Empty => "Empty",
         }
     }
@@ -34,12 +52,61 @@ impl EditorKind {
     pub fn index(self) -> usize {
         Self::ALL.iter().position(|k| *k == self).unwrap_or(0)
     }
+
+    /// Keymap context name for this editor.
+    pub fn keymap_context(self) -> &'static str {
+        match self {
+            EditorKind::Outliner => prism_ops::keymap::CTX_OUTLINER,
+            _ => "editor",
+        }
+    }
 }
 
-/// Mutable state editors draw from and into.
+/// Everything an editor may read and change.
 pub struct EditorCtx<'a> {
+    pub doc: &'a mut Doc,
+    pub exec: &'a mut Executor,
     pub prefs: &'a mut Prefs,
     pub gallery: &'a mut GalleryState,
+    pub outliner: &'a mut OutlinerState,
+    pub properties: &'a mut PropertiesState,
+    /// Requests for the shell (menus, palette, quit) gathered this frame.
+    pub requests: &'a mut Vec<UiRequest>,
+    pub pointer: Vec2,
+}
+
+impl EditorCtx<'_> {
+    /// Run an operator with overrides; requests are collected for the shell.
+    pub fn run(&mut self, op: &str, overrides: &[(&str, Value)]) -> OpResult<Outcome> {
+        let mut ctx = Ctx::new(self.doc);
+        ctx.pointer = self.pointer;
+        let r = self.exec.run_with(op, overrides, &mut ctx);
+        self.requests.append(&mut self.exec.requests);
+        if r.is_ok() && (op == "wm.save" || op == "wm.save_as") {
+            self.exec.mark_saved();
+        }
+        r
+    }
+
+    /// Record a direct property edit as an undo step. While the pointer is
+    /// held (a drag), consecutive edits with the same label coalesce.
+    pub fn record_edit(&mut self, before: Doc, label: &str, dragging: bool) {
+        if dragging
+            && let Some(last) = self.exec.history.last_mut()
+            && last.op_id == "ui.edit"
+            && last.label == label
+        {
+            last.after = self.doc.clone();
+            return;
+        }
+        self.exec.history.push(UndoStep {
+            before,
+            after: self.doc.clone(),
+            label: label.to_owned(),
+            op_id: "ui.edit".to_owned(),
+            props: None,
+        });
+    }
 }
 
 /// Draw the body of an editor. Returns `true` if it changed something that
@@ -48,6 +115,14 @@ pub fn draw_editor(kind: EditorKind, ui: &mut Ui, ctx: &mut EditorCtx) -> bool {
     match kind {
         EditorKind::Viewport => {
             viewport::draw(ui);
+            false
+        }
+        EditorKind::Outliner => {
+            outliner::draw(ui, ctx);
+            false
+        }
+        EditorKind::Properties => {
+            properties::draw(ui, ctx);
             false
         }
         EditorKind::Gallery => {
