@@ -483,6 +483,26 @@ double click or Enter confirms. `std::fs` only.
 where his mouse is! I want that" and "there's no file browser for me to
 choose where to save anything to."
 
+## D031 — glTF in and out, in a `prism-io` crate with its own JSON
+**Status:** Accepted (implemented 2026-09-02)
+**Decision:** Exchange formats move to **`prism-io`** (above `prism-eval`,
+below `prism-ops`): OBJ and glTF 2.0, plus `prism_io::json`, a small RFC
+8259 reader/writer. Both formats now export the **evaluated** mesh
+(modifiers applied), as the viewport shows it. glTF export writes one node
+per visible mesh object (translation, quaternion, scale), one mesh each with
+a single TRIANGLES primitive (float positions and normals from
+`prism_eval::evaluate`, u32 indices, min/max on positions) and a
+pbrMetallicRoughness material with the linear base colour; `.glb` packs a
+binary chunk, `.gltf` embeds the buffer as a base64 data URI. Import handles
+`.glb` and `.gltf` (data URIs or sibling files), walks the default scene's
+node tree composing `matrix` or TRS, bakes each mesh node's world transform
+onto a new object (decomposed to location / XYZ Euler / scale), rebuilds
+meshes from TRIANGLES, STRIP and FAN primitives, **welds** the vertices glTF
+splits along seams so the result edits as one surface, and carries the base
+colour over as a material. Unsupported: sparse accessors, Draco, skins,
+animation; faces come in flat-shaded. Y-up both sides, so no axis swap.
+**Why:** Alva's game editor and video editor only speak `.glb`.
+
 ---
 
 ## Open questions

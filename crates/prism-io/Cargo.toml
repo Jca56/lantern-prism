@@ -1,10 +1,10 @@
 [package]
-name = "prism-ops"
+name = "prism-io"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Prism operators: the verb system. Trait, registry, executor, keymaps, built-ins."
+description = "Prism exchange formats: OBJ and glTF, with their own JSON parser. Exports the evaluated mesh."
 
 [lints]
 workspace = true
@@ -12,8 +12,6 @@ workspace = true
 [dependencies]
 prism-math.workspace = true
 prism-core.workspace = true
-prism-props.workspace = true
 prism-mesh.workspace = true
 prism-doc.workspace = true
 prism-eval.workspace = true
-prism-io.workspace = true

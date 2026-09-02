@@ -9,7 +9,6 @@ pub mod file;
 pub mod history;
 pub mod mesh_io;
 pub mod modifiers;
-pub mod obj;
 pub mod store;
 
 pub use blocks::{
@@ -21,5 +20,4 @@ pub use file::{FileError, load, load_file, save, save_file};
 pub use history::{History, HistoryStats, UndoStep};
 pub use mesh_io::MeshIoError;
 pub use modifiers::{MirrorProps, Modifier, ModifierKind, SubsurfProps};
-pub use obj::{ObjError, ObjMesh};
 pub use store::Store;

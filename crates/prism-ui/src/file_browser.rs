@@ -20,8 +20,9 @@ pub struct FileBrowser {
     /// The path field as typed; follows `dir` when you navigate.
     dir_text: String,
     pub name: String,
-    /// Wanted extension without the dot ("prism", "obj"); empty shows all files.
-    ext: String,
+    /// Wanted extensions without the dot ("prism"; "glb" and "gltf"); empty
+    /// shows all files. The first is added to a bare name.
+    exts: Vec<String>,
     pub save: bool,
     entries: Vec<Entry>,
     error: Option<String>,
@@ -44,9 +45,15 @@ impl FileBrowser {
     /// its extension as the filter.
     pub fn new(suggest: &Path, save: bool) -> Self {
         let name = suggest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        let ext = suggest.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
+        let ext = suggest.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        // Formats with two spellings show both.
+        let exts: Vec<String> = match ext.as_str() {
+            "glb" | "gltf" => vec!["glb".into(), "gltf".into()],
+            "" => Vec::new(),
+            e => vec![e.to_owned()],
+        };
         let parent = suggest.parent().filter(|p| !p.as_os_str().is_empty() && p.is_dir()).map(Path::to_path_buf);
-        let mut fb = Self { dir: parent.unwrap_or_else(home), dir_text: String::new(), name, ext, save, entries: Vec::new(), error: None };
+        let mut fb = Self { dir: parent.unwrap_or_else(home), dir_text: String::new(), name, exts, save, entries: Vec::new(), error: None };
         fb.refresh();
         fb
     }
@@ -59,7 +66,7 @@ impl FileBrowser {
         self.dir_text = self.dir.display().to_string();
         self.entries.clear();
         self.error = None;
-        let want = format!(".{}", self.ext.to_lowercase());
+        let wanted: Vec<String> = self.exts.iter().map(|e| format!(".{e}")).collect();
         match std::fs::read_dir(&self.dir) {
             Ok(read) => {
                 for e in read.flatten() {
@@ -68,7 +75,8 @@ impl FileBrowser {
                         continue;
                     }
                     let is_dir = e.path().is_dir();
-                    if !is_dir && !self.ext.is_empty() && !name.to_lowercase().ends_with(&want) {
+                    let lower = name.to_lowercase();
+                    if !is_dir && !wanted.is_empty() && !wanted.iter().any(|w| lower.ends_with(w)) {
                         continue;
                     }
                     self.entries.push(Entry { name, is_dir });
@@ -120,8 +128,8 @@ impl FileBrowser {
             return None;
         }
         let mut path = self.dir.join(name);
-        if path.extension().is_none() && !self.ext.is_empty() {
-            path.set_extension(&self.ext);
+        if path.extension().is_none() && let Some(first) = self.exts.first() {
+            path.set_extension(first);
         }
         Some(path)
     }
@@ -133,7 +141,7 @@ impl FileBrowser {
 pub fn draw(ui: &mut Ui, fb: &mut FileBrowser, rect: Rect) -> Verdict {
     let m = ui.m;
     let mut verdict = Verdict::Open;
-    let what = if fb.ext.is_empty() { "all files".to_owned() } else { format!(".{} files", fb.ext) };
+    let what = if fb.exts.is_empty() { "all files".to_owned() } else { format!("{} files", fb.exts.iter().map(|e| format!(".{e}")).collect::<Vec<_>>().join(" / ")) };
     ui.label_dim(&format!("{} · {what}", if fb.save { "Save as" } else { "Open" }));
 
     // Where: home, up, and the path itself.
@@ -246,6 +254,9 @@ mod tests {
         assert!(fb.error.is_some() && fb.dir() == dir.as_path(), "a bad path is reported, not followed");
         let none = FileBrowser::new(Path::new("untitled.obj"), false);
         assert_eq!(none.dir(), home().as_path(), "a bare name starts at home");
+        let glb = FileBrowser::new(Path::new("untitled.glb"), true);
+        assert_eq!(glb.exts, vec!["glb", "gltf"], "both glTF spellings show");
+        assert_eq!(glb.chosen().unwrap().extension().unwrap(), "glb");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

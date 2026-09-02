@@ -11,11 +11,9 @@ use core::fmt;
 use std::collections::HashMap;
 use std::path::Path;
 
+use prism_doc::{DataKind, Doc};
 use prism_math::Vec3;
 use prism_mesh::{Mesh, VertH};
-
-use crate::blocks::DataKind;
-use crate::doc::Doc;
 
 #[derive(Debug)]
 pub enum ObjError {
@@ -85,21 +83,6 @@ fn face_index(token: &str, count: usize, line: usize) -> Result<usize, ObjError>
     Ok(idx as usize)
 }
 
-/// Make any missing edges, then the face; `None` if the kernel refuses.
-fn try_add_face(mesh: &mut Mesh, verts: &[VertH]) -> Option<()> {
-    let n = verts.len();
-    if n < 3 || (0..n).any(|i| verts[i + 1..].contains(&verts[i])) {
-        return None;
-    }
-    for i in 0..n {
-        let (a, b) = (verts[i], verts[(i + 1) % n]);
-        if mesh.edge_between(a, b).is_none() {
-            mesh.make_edge(a, b).ok()?;
-        }
-    }
-    mesh.make_face(verts).ok().map(|_| ())
-}
-
 /// Parse OBJ text. `default_name` names a mesh with no `o` line.
 pub fn parse(text: &str, default_name: &str) -> Result<Vec<ObjMesh>, ObjError> {
     let mut positions: Vec<Vec3> = Vec::new();
@@ -127,7 +110,7 @@ pub fn parse(text: &str, default_name: &str) -> Result<Vec<ObjMesh>, ObjError> {
                     let idx = face_index(token, positions.len(), line)?;
                     verts.push(group.vert(idx, &positions));
                 }
-                if try_add_face(&mut group.mesh, &verts).is_none() {
+                if crate::add_face_lenient(&mut group.mesh, &verts).is_none() {
                     group.skipped += 1;
                 }
             }
@@ -164,8 +147,8 @@ fn num(v: f64) -> String {
     if s == "-0" { "0".to_owned() } else { s.to_owned() }
 }
 
-/// Every visible mesh object of the active scene, in world space. Returns
-/// the text and how many objects it holds.
+/// Every visible mesh object of the active scene, modifiers applied, in
+/// world space. Returns the text and how many objects it holds.
 pub fn write(doc: &Doc) -> (String, usize) {
     let mut out = String::from("# Prism OBJ export\n");
     let mut base = 1usize; // OBJ indices are global and one-based
@@ -180,7 +163,8 @@ pub fn write(doc: &Doc) -> (String, usize) {
         let Some(block) = doc.meshes.get(obj.data) else {
             continue;
         };
-        let m = &block.mesh;
+        let eval = prism_eval::apply_modifiers(&block.mesh, &block.modifiers);
+        let m = &eval.mesh;
         let world = doc.object_matrix(id);
         out.push_str(&format!("o {}\n", obj.name.replace(char::is_whitespace, "_")));
         let mut index: HashMap<VertH, usize> = HashMap::with_capacity(m.vert_count());

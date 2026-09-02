@@ -7,6 +7,7 @@ members = [
     "crates/prism-geom",
     "crates/prism-mesh",
     "crates/prism-eval",
+    "crates/prism-io",
     "crates/prism-doc",
     "crates/prism-ops",
     "crates/prism-viewport",
@@ -29,6 +30,7 @@ prism-props = { path = "crates/prism-props" }
 prism-geom = { path = "crates/prism-geom" }
 prism-mesh = { path = "crates/prism-mesh" }
 prism-eval = { path = "crates/prism-eval" }
+prism-io = { path = "crates/prism-io" }
 prism-doc = { path = "crates/prism-doc" }
 prism-ops = { path = "crates/prism-ops" }
 prism-viewport = { path = "crates/prism-viewport" }

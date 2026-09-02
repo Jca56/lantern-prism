@@ -1316,6 +1316,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-io"
+version = "0.1.0"
+dependencies = [
+ "prism-core",
+ "prism-doc",
+ "prism-eval",
+ "prism-math",
+ "prism-mesh",
+]
+
+[[package]]
 name = "prism-math"
 version = "0.1.0"
 
@@ -1335,6 +1346,7 @@ dependencies = [
  "prism-core",
  "prism-doc",
  "prism-eval",
+ "prism-io",
  "prism-math",
  "prism-mesh",
  "prism-props",

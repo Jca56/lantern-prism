@@ -67,8 +67,14 @@ impl From<prism_doc::FileError> for OpError {
     }
 }
 
-impl From<prism_doc::ObjError> for OpError {
-    fn from(e: prism_doc::ObjError) -> Self {
+impl From<prism_io::ObjError> for OpError {
+    fn from(e: prism_io::ObjError) -> Self {
+        OpError::Failed(e.to_string())
+    }
+}
+
+impl From<prism_io::GltfError> for OpError {
+    fn from(e: prism_io::GltfError) -> Self {
         OpError::Failed(e.to_string())
     }
 }

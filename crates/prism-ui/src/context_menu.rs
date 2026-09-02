@@ -111,6 +111,8 @@ fn file_items() -> Vec<Item> {
         Item::Separator,
         act("Import OBJ…", "wm.import_obj", vec![]),
         act("Export OBJ…", "wm.export_obj", vec![]),
+        act("Import glTF…", "wm.import_gltf", vec![]),
+        act("Export glTF…", "wm.export_gltf", vec![]),
     ]
 }
 
