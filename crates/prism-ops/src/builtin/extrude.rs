@@ -3,7 +3,7 @@
 //! `offset` directly.
 
 use prism_core::Id;
-use prism_math::{Vec2, Vec3};
+use prism_math::{Mat4, Quat, Vec2, Vec3};
 use prism_mesh::{Mesh, VertH};
 use prism_props::props;
 
@@ -149,8 +149,57 @@ impl Operator for Extrude {
     }
 }
 
+props! {
+    pub struct ExtrudeToCursorProps {
+        /// Where the new region's centre lands, in world space.
+        pub target: Vec3 = Vec3::ZERO => { id: 1, subtype: Translation },
+        /// Turn the new region to face the way it travelled, so a chain of
+        /// extrusions bends like a trunk.
+        pub rotate: bool = true => { id: 2 },
+    }
+}
+
+/// Extrude the selected faces so they land under the pointer (D030). Bound
+/// to Ctrl+right-click in edit mode, as in Blender.
+pub struct ExtrudeToCursor;
+impl Operator for ExtrudeToCursor {
+    const ID: &'static str = "mesh.extrude_to_cursor";
+    const LABEL: &'static str = "Extrude to Cursor";
+    type Props = ExtrudeToCursorProps;
+    type Modal = ();
+    fn poll(ctx: &Ctx) -> bool {
+        in_edit_mode(ctx)
+    }
+    fn exec(ctx: &mut Ctx, p: &ExtrudeToCursorProps) -> OpResult<Outcome> {
+        let id = ctx.doc.active_object_id();
+        let to_world = ctx.doc.object_matrix(id);
+        let to_local = to_world.inverse().unwrap_or(Mat4::IDENTITY);
+        let Some(block) = edit_mesh(ctx) else {
+            return Ok(Outcome::Cancelled);
+        };
+        let Some((moved, n)) = extrude(&mut block.mesh)? else {
+            ctx.report("Extrude to Cursor: select faces first");
+            return Ok(Outcome::Cancelled);
+        };
+        let count = moved.len().max(1) as f64;
+        let centre = moved.iter().fold(Vec3::ZERO, |s, (_, b, _)| s + to_world.transform_point(*b)) / count;
+        let normal = to_world.transform_vector(moved.iter().fold(Vec3::ZERO, |s, (_, _, nn)| s + *nn) / count).normalize_or(Vec3::Y);
+        let travel = p.target - centre;
+        let dir = travel.normalize_or(normal);
+        let turn = if p.rotate { Quat::from_rotation_arc(normal, dir) } else { Quat::from_axis_angle(Vec3::Y, 0.0) };
+        for &(v, base, _) in &moved {
+            let carried = to_world.transform_point(base) + travel;
+            let world = p.target + turn * (carried - p.target);
+            block.mesh.set_position(v, to_local.transform_point(world));
+        }
+        ctx.report(format!("Extruded {n} face(s) to cursor"));
+        Ok(Outcome::Finished)
+    }
+}
+
 pub fn register(r: &mut Registry) {
     r.register::<Extrude>();
+    r.register::<ExtrudeToCursor>();
 }
 
 #[cfg(test)]
@@ -159,6 +208,37 @@ mod tests {
     use crate::builtin::transform::tests::{click, ctx, escape, key, moved, selected_cube};
     use prism_doc::Doc;
     use prism_props::Value;
+
+    #[test]
+    fn extrude_to_cursor_lands_on_the_target_and_turns_toward_it() {
+        let (mut doc, mut ex, cube) = selected_cube();
+        ex.run_with("object.mode_set", &[("mode", Value::Enum(1))], &mut Ctx::new(&mut doc)).unwrap();
+        {
+            let block = doc.object_mesh_mut(cube).unwrap();
+            let top = block.mesh.faces().find(|&f| block.mesh.face_normal(f).approx_eq(Vec3::Y, 1e-9)).unwrap();
+            select::select_faces(&mut block.mesh, &[top]);
+        }
+        // The top face (centre (0,1,0), facing +Y) goes to (2,3,0): up and to
+        // the right, so the new face ends up facing that way too.
+        ex.run_with("mesh.extrude_to_cursor", &[("target", Value::Vec3(Vec3::new(2.0, 3.0, 0.0)))], &mut Ctx::new(&mut doc)).unwrap();
+        let m = &doc.object_mesh(cube).unwrap().mesh;
+        assert_eq!(m.face_count(), 10);
+        let f = select::selected_faces(m)[0];
+        let centre = m.face_positions(f).iter().fold(Vec3::ZERO, |s, p| s + *p) / 4.0;
+        assert!((centre - Vec3::new(2.0, 3.0, 0.0)).length() < 1e-9, "{centre:?}");
+        let n = m.face_normal(f);
+        let want = Vec3::new(2.0, 2.0, 0.0).normalize();
+        assert!((n - want).length() < 1e-9, "turned to face its travel: {n:?}");
+        // Chain: the new face is selected, so another click keeps building.
+        ex.run_with("mesh.extrude_to_cursor", &[("target", Value::Vec3(Vec3::new(2.0, 5.0, 0.0))), ("rotate", Value::Bool(false))], &mut Ctx::new(&mut doc)).unwrap();
+        let m = &doc.object_mesh(cube).unwrap().mesh;
+        assert_eq!(m.face_count(), 14);
+        let f = select::selected_faces(m)[0];
+        assert!((m.face_normal(f) - want).length() < 1e-9, "rotate off keeps the orientation");
+        ex.undo(&mut doc);
+        ex.undo(&mut doc);
+        assert_eq!(doc.object_mesh(cube).unwrap().mesh.face_count(), 6);
+    }
 
     #[test]
     fn interactive_extrude_drags_along_the_normal() {

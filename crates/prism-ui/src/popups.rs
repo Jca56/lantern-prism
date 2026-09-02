@@ -11,6 +11,7 @@ use prism_props::Value;
 use crate::context_menu::{ContextMenu, Item, Width};
 use crate::editors::{record_edit, run_op};
 use crate::event::Key;
+use crate::file_browser::{self, FileBrowser, Verdict};
 use crate::icons::Icon;
 use crate::state::CursorIcon;
 use crate::ui::{FILL, Sense, Ui};
@@ -32,7 +33,8 @@ impl MenuItem {
 pub enum Popup {
     Menu { title: String, items: Vec<MenuItem>, pos: Vec2 },
     Palette { query: String, selected: usize },
-    Path { op: String, save: bool, text: String },
+    /// A file browser that runs `op` with the chosen `path`.
+    Path { op: String, browser: FileBrowser },
     Context(ContextMenu),
 }
 
@@ -126,8 +128,8 @@ pub fn draw(
             Rect::from_min_size(Vec2::new((window.center().x - w * 0.5).round(), window.min.y + m.px(80.0)), Vec2::new(w, h))
         }
         Popup::Path { .. } => {
-            let w = m.px(700.0).min(window.width() - m.pad * 2.0);
-            let h = m.widget_h * 3.0 + m.gap * 4.0;
+            let w = m.px(1000.0).min(window.width() - m.pad * 2.0);
+            let h = m.px(760.0).min(window.height() - m.pad * 2.0);
             Rect::from_min_size((window.center() - Vec2::new(w, h) * 0.5).round(), Vec2::new(w, h))
         }
         Popup::Context(_) => unreachable!(),
@@ -218,28 +220,14 @@ pub fn draw(
                 ui.pop_id();
             }
         }
-        Popup::Path { op, save, text } => {
-            ui.label_dim(if *save { "Save as" } else { "Open" });
-            let field = ui.id("path");
-            if ui.state.focus.is_none() {
-                ui.state.focus = Some(field);
-            }
-            let field_rect = ui.alloc(Vec2::new(FILL, m.widget_h));
-            let r = ui.text_edit_core(field, field_rect, text);
-            let mut go = r.committed;
-            ui.row(|ui| {
-                if ui.button(if *save { "Save" } else { "Open" }).clicked {
-                    go = true;
-                }
-                if ui.button("Cancel").clicked {
-                    out.close = true;
-                }
-            });
-            if go && !text.trim().is_empty() {
-                host.run(op, &[("path".to_owned(), Value::Str(text.trim().to_owned()))]);
+        Popup::Path { op, browser } => match file_browser::draw(ui, browser, content) {
+            Verdict::Confirm(path) => {
+                host.run(op, &[("path".to_owned(), Value::Str(path.display().to_string()))]);
                 out.close = true;
             }
-        }
+            Verdict::Cancel => out.close = true,
+            Verdict::Open => {}
+        },
         Popup::Context(_) => unreachable!(),
     }
 

@@ -5,6 +5,7 @@
 use prism_doc::{ObjectMode, SelectMode};
 use prism_math::{Color, Rect, Vec2};
 use prism_ops::{UiRequest, ViewInfo};
+use prism_props::Value;
 use prism_viewport::{Camera, Drag, GizmoMode, PickMode, PickPurpose, PickRequest, Shading, ViewColors, ViewPreset, ViewportRequest};
 
 use crate::editors::{EditorCtx, gizmo};
@@ -107,6 +108,22 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
 
     // The gizmo gets first claim on a press; a handle drag starts a transform.
     gizmo::draw(ui, ctx, rect);
+
+    // Ctrl+right-click in edit mode extrudes the selection to the pointer
+    // (D030); it turns toward the click, so a chain of clicks draws a trunk.
+    let ctrl_extrude = {
+        let st = &*ui.state;
+        let over = st.pointer_in_window && rect.contains(st.pointer) && st.popup.is_none_or(|(p, _)| !p.contains(st.pointer));
+        st.mods.ctrl() && mode != PickMode::Object && st.right_pressed && over
+    };
+    if ctrl_extrude
+        && let Some(view) = ctx.view
+        && let Some(pivot) = prism_ops::builtin::transform::pivot(ctx.doc)
+        && let Some(target) = view.on_view_plane(pivot, ui.state.pointer)
+    {
+        let _ = ctx.run("mesh.extrude_to_cursor", &[("target", Value::Vec3(target))]);
+        ui.state.request_rebuild = true;
+    }
     let vp = &mut *ctx.viewport;
 
     // ---- the pointer on the body ----------------------------------------------
@@ -152,7 +169,7 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
     let request = move |purpose: PickPurpose, extend: bool, toggle: bool, region: Rect| PickRequest { purpose, area, rect, camera, pos, mode, radius, extend, toggle, region, colors };
 
     // ---- right click: context menu for what is under the pointer ---------------
-    if st.right_pressed && over {
+    if st.right_pressed && over && !(st.mods.ctrl() && mode != PickMode::Object) {
         ctx.picks.push(request(PickPurpose::ContextMenu, false, false, Rect::ZERO));
     }
 

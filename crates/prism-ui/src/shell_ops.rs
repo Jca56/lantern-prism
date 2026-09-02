@@ -80,7 +80,8 @@ impl Shell {
                 UiRequest::Palette => self.popup = Some(Popup::Palette { query: String::new(), selected: 0 }),
                 UiRequest::PathDialog { op, save, suggest } => {
                     let text = suggest.unwrap_or_else(|| doc.path.as_ref().map_or_else(|| "untitled.prism".to_owned(), |p| p.display().to_string()));
-                    self.popup = Some(Popup::Path { op, save, text });
+                    let browser = crate::file_browser::FileBrowser::new(std::path::Path::new(&text), save);
+                    self.popup = Some(Popup::Path { op, browser });
                 }
                 UiRequest::Quit => quit = true,
                 UiRequest::ViewFrame { selected } => {

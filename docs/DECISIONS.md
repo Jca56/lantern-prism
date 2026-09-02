@@ -465,6 +465,24 @@ box-modeller can make; non-destructive means the cage stays editable.
 Evaluation runs whenever geometry or the stack changes — fine for the
 meshes the cage workflow produces, to be cached per modifier later.
 
+## D030 — Extrude to Cursor, and a real file browser
+**Status:** Accepted (implemented 2026-09-02)
+**Decision:** `mesh.extrude_to_cursor` extrudes the selected faces so the
+new region's centre lands on `target` and, with `rotate` (default), turns
+the region to face its direction of travel (`Quat::from_rotation_arc` from
+the old normal to the travel direction, about the new centre); the new
+faces stay selected so clicks chain into a bending limb. The viewport binds
+it to **Ctrl+right-click in edit mode**, with the target being the pointer
+projected onto the view plane through the selection's pivot. Object mode's
+Ctrl+right-click still opens the menu. The path dialog is now a **file
+browser** (`prism-ui::file_browser`): folders first, files filtered to the
+wanted extension, a typeable path with `~`, Home / Up, a name field that
+gains the extension if missing; a click opens a folder or picks a file, a
+double click or Enter confirms. `std::fs` only.
+**Why:** Alva, following a tree tutorial: "he clicks to make it extrude to
+where his mouse is! I want that" and "there's no file browser for me to
+choose where to save anything to."
+
 ---
 
 ## Open questions

@@ -16,6 +16,7 @@ pub mod context_menu;
 pub mod editors;
 pub mod icons;
 pub mod event;
+pub mod file_browser;
 pub mod id;
 pub mod panel;
 pub mod popups;
