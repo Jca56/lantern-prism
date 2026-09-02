@@ -13,3 +13,4 @@ prism-math.workspace = true
 prism-core.workspace = true
 prism-geom.workspace = true
 prism-mesh.workspace = true
+prism-doc.workspace = true

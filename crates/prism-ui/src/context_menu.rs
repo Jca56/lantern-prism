@@ -176,6 +176,9 @@ impl ContextMenu {
                     actions.push(act("Shade Smooth", "object.shade", vec![("smooth", Value::Bool(true))]));
                     actions.push(act("Shade Flat", "object.shade", vec![("smooth", Value::Bool(false))]));
                     actions.push(Item::Separator);
+                    actions.push(act("Add Mirror", "object.modifier_add", vec![("kind", Value::Enum(0))]));
+                    actions.push(act("Add Subdivision Surface", "object.modifier_add", vec![("kind", Value::Enum(1))]));
+                    actions.push(Item::Separator);
                 }
                 if let Some(p) = op_panel(exec, "object.rename") {
                     actions.push(p);

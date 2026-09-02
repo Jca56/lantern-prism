@@ -78,6 +78,7 @@ fn data_tab(ui: &mut Ui, ctx: &mut EditorCtx) {
                     }
                 }
             }
+            changed |= modifiers_panel(ui, ctx, obj.data);
             if obj.mode == ObjectMode::Edit {
                 mesh_tools(ui, ctx);
             }
@@ -101,6 +102,58 @@ fn data_tab(ui: &mut Ui, ctx: &mut EditorCtx) {
     if changed {
         ctx.record_edit(before, "Edit Data", dragging);
     }
+}
+
+/// The modifier stack (D029): a panel per modifier with Apply and Remove,
+/// then buttons to add one. Property edits are direct edits; add / remove /
+/// apply go through their operators. Returns whether props changed.
+fn modifiers_panel(ui: &mut Ui, ctx: &mut EditorCtx, mesh: prism_core::Id) -> bool {
+    let Some(block) = ctx.doc.meshes.get_mut(mesh) else {
+        return false;
+    };
+    ui.heading("Modifiers");
+    let mut changed = false;
+    let (mut apply, mut remove) = (None, None);
+    for (i, m) in block.modifiers.iter_mut().enumerate() {
+        ui.push_index(i);
+        let label = m.label();
+        ui.collapsing(label, |ui| {
+            changed |= ui.props_panel(m.props_mut());
+            ui.row(|ui| {
+                if ui.button("Apply").clicked {
+                    apply = Some(i);
+                }
+                if ui.button("Remove").clicked {
+                    remove = Some(i);
+                }
+            });
+        });
+        ui.pop_id();
+    }
+    if changed {
+        block.bump_modifiers();
+    }
+    if block.modifiers.is_empty() {
+        ui.label_dim("None yet");
+    }
+    let mut add = None;
+    ui.row(|ui| {
+        ui.label_dim("Add");
+        if ui.button("Mirror").clicked {
+            add = Some(0);
+        }
+        if ui.button("Subdivision Surface").clicked {
+            add = Some(1);
+        }
+    });
+    if let Some(i) = apply {
+        let _ = ctx.run("object.modifier_apply", &[("index", Value::I64(i as i64))]);
+    } else if let Some(i) = remove {
+        let _ = ctx.run("object.modifier_remove", &[("index", Value::I64(i as i64))]);
+    } else if let Some(kind) = add {
+        let _ = ctx.run("object.modifier_add", &[("kind", Value::Enum(kind))]);
+    }
+    changed
 }
 
 /// Edit-mode actions too rare for the context menu (Alva, 2026-09-02).

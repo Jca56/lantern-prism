@@ -434,6 +434,29 @@ confirms, and cuts / factor live in Adjust Last Operation.
 the right-clicked edge fits D023 and avoids per-frame hover picking; a
 hover preview can come later on the same ring walk.
 
+## D029 — Modifier stack: data on the mesh block, evaluated in `prism-eval`, drawn as surface + cage
+**Status:** Accepted (implemented 2026-09-02; Phase 8)
+**Decision:** `MeshBlock` carries `modifiers: Vec<Modifier>` (Mirror,
+Subdivision Surface — `props!` structs in `prism-doc::modifiers`) and a
+`modifiers_version`; the file writes them as a `MODS` chunk per mesh that
+older builds skip. `prism_eval::apply_modifiers` is a pure function of base
+mesh + stack returning the result mesh and a **face-origin map** back to the
+base face, so selection tints follow the smooth surface. Mirror reflects
+across local axes, reversing winding, welding vertices within
+`merge_distance` of the plane and dropping faces that lie in it; Subsurf is
+Catmull-Clark on n-gons with boundary crease rules (`smooth` off just
+splits). The GPU cache keeps two entries per modified mesh: the **cage**
+(base: edited, picked, drawn as edges and dots in edit mode) and the
+**surface** (result: solid shading, object-mode wire, object picking). Ops
+`object.modifier_add` / `_remove` / `_apply` (apply bakes the stack up to an
+index into the base and resets edit state); the Properties Data tab shows a
+panel per modifier. This puts `prism-eval` *below* `prism-ops` in the D011
+ladder (ops needs evaluation for Apply); `prism-doc` stays below both.
+**Why:** Symmetry and smoothness are the two biggest jumps in what a
+box-modeller can make; non-destructive means the cage stays editable.
+Evaluation runs whenever geometry or the stack changes — fine for the
+meshes the cage workflow produces, to be cached per modifier later.
+
 ---
 
 ## Open questions

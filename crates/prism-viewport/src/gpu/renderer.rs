@@ -230,28 +230,34 @@ impl Renderer {
             pass.draw(0..3, 0..1);
 
             for o in &vp.objects {
-                let Some(g) = self.meshes.get(o.mesh) else {
+                let Some(cage) = self.meshes.get(o.mesh) else {
                     continue;
                 };
+                // The modifier result is the surface you see; in edit mode
+                // the base mesh sits over it as a cage of edges and dots.
+                let surface = self.meshes.surface(o.mesh).unwrap_or(cage);
+                let wire = if o.edit { cage } else { surface };
                 pass.set_bind_group(1, &self.objects.bind_group, &[o.object_offset]);
-                pass.set_bind_group(2, &g.flags_bind_group, &[]);
-                if vp.shading == Shading::Solid && g.tri_index_count > 0 {
+                if vp.shading == Shading::Solid && surface.tri_index_count > 0 {
+                    pass.set_bind_group(2, &surface.flags_bind_group, &[]);
                     pass.set_pipeline(&self.pipes.mesh);
-                    pass.set_vertex_buffer(0, g.corner_pos.slice(..));
-                    pass.set_vertex_buffer(1, g.corner_normal.slice(..));
-                    pass.set_vertex_buffer(2, g.corner_face.slice(..));
-                    pass.set_index_buffer(g.tri_index.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..g.tri_index_count, 0, 0..1);
+                    pass.set_vertex_buffer(0, surface.corner_pos.slice(..));
+                    pass.set_vertex_buffer(1, surface.corner_normal.slice(..));
+                    pass.set_vertex_buffer(2, surface.corner_face.slice(..));
+                    pass.set_index_buffer(surface.tri_index.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..surface.tri_index_count, 0, 0..1);
                 }
-                if (vp.wire_overlay || vp.shading == Shading::Wire) && g.edge_vertex_count > 0 {
+                if (vp.wire_overlay || vp.shading == Shading::Wire) && wire.edge_vertex_count > 0 {
+                    pass.set_bind_group(2, &wire.flags_bind_group, &[]);
                     pass.set_pipeline(&self.pipes.wire);
-                    pass.set_vertex_buffer(0, g.edge_pos.slice(..));
-                    pass.draw(0..g.edge_vertex_count, 0..1);
+                    pass.set_vertex_buffer(0, wire.edge_pos.slice(..));
+                    pass.draw(0..wire.edge_vertex_count, 0..1);
                 }
-                if o.edit && vp.vert_overlay && g.vert_count > 0 {
+                if o.edit && vp.vert_overlay && cage.vert_count > 0 {
+                    pass.set_bind_group(2, &cage.flags_bind_group, &[]);
                     pass.set_pipeline(&self.pipes.points);
-                    pass.set_vertex_buffer(0, g.vert_pos.slice(..));
-                    pass.draw(0..6, 0..g.vert_count);
+                    pass.set_vertex_buffer(0, cage.vert_pos.slice(..));
+                    pass.draw(0..6, 0..cage.vert_count);
                 }
             }
         }

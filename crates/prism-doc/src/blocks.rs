@@ -6,6 +6,8 @@ use prism_math::{Color, Mat4, Quat, Transform, Vec3};
 use prism_mesh::{EdgeH, FaceH, Mesh, VertH};
 use prism_props::props;
 
+use crate::modifiers::Modifier;
+
 props! {
     pub enum SelectMode {
         Vertex = 0,
@@ -123,11 +125,20 @@ pub struct MeshBlock {
     pub props: MeshProps,
     pub mesh: Mesh,
     pub edit: EditState,
+    /// Non-destructive stack applied for display (D029).
+    pub modifiers: Vec<Modifier>,
+    /// Bumped whenever `modifiers` changes, so the evaluated mesh cache knows.
+    pub modifiers_version: u64,
 }
 
 impl MeshBlock {
     pub fn new(name: &str, mesh: Mesh) -> Self {
-        Self { props: MeshProps { name: name.to_owned(), ..MeshProps::default() }, mesh, edit: EditState::default() }
+        Self { props: MeshProps { name: name.to_owned(), ..MeshProps::default() }, mesh, edit: EditState::default(), modifiers: Vec::new(), modifiers_version: 0 }
+    }
+
+    /// The stack changed: the evaluated mesh must be rebuilt.
+    pub fn bump_modifiers(&mut self) {
+        self.modifiers_version += 1;
     }
 
     pub fn id(&self) -> Id {

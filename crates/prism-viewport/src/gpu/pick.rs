@@ -117,7 +117,9 @@ impl Renderer {
         });
         pass.set_bind_group(0, &self.views.bind_group, &[view_offset]);
         for &(mesh_id, off) in &draws {
-            let Some(g) = self.meshes.get(mesh_id) else {
+            // Objects are picked on the surface you see; elements on the cage.
+            let looked_up = if req.mode == PickMode::Object { self.meshes.surface(mesh_id) } else { self.meshes.get(mesh_id) };
+            let Some(g) = looked_up else {
                 continue;
             };
             pass.set_bind_group(1, &self.objects.bind_group, &[off]);

@@ -5,6 +5,7 @@ pub mod inset;
 pub mod io;
 pub mod loop_cut;
 pub mod mesh;
+pub mod modifier;
 pub mod object;
 pub mod select;
 pub mod transform;
@@ -17,6 +18,7 @@ pub fn register_all(r: &mut Registry) {
     wm::register(r);
     io::register(r);
     object::register(r);
+    modifier::register(r);
     mesh::register(r);
     extrude::register(r);
     inset::register(r);

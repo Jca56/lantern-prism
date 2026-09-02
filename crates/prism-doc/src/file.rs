@@ -16,6 +16,7 @@ use prism_props::{Reflect, serial};
 use crate::blocks::{Camera, Collection, Light, Material, MeshBlock, MeshProps, Object, Scene};
 use crate::doc::{Doc, DocProps};
 use crate::mesh_io;
+use crate::modifiers::{MirrorProps, Modifier, SubsurfProps};
 
 const MAGIC: &[u8; 4] = b"PRSM";
 const FORMAT_VERSION: u32 = 1;
@@ -89,6 +90,19 @@ pub fn save(doc: &Doc) -> Vec<u8> {
         full.append(&mut payload);
         full.append(&mut body);
         chunk(&mut out, b"MESH", id, &full);
+        // The modifier stack rides in its own chunk (D029): count, then
+        // per modifier its kind id, props length, props bytes. Older builds
+        // skip it.
+        if !m.modifiers.is_empty() {
+            let mut body = (m.modifiers.len() as u32).to_le_bytes().to_vec();
+            for md in &m.modifiers {
+                let props = serial::to_bytes(md.props());
+                body.extend_from_slice(&md.kind_id().to_le_bytes());
+                body.extend_from_slice(&(props.len() as u32).to_le_bytes());
+                body.extend_from_slice(&props);
+            }
+            chunk(&mut out, b"MODS", id, &body);
+        }
     }
     for (id, m) in doc.materials.iter() {
         block_chunk(&mut out, b"MATL", id, m);
@@ -106,6 +120,30 @@ fn read_block<T: Reflect + Default>(payload: &[u8], tag: &str) -> Result<T, File
     let mut b = T::default();
     serial::from_bytes(&mut b, payload).map_err(|e| FileError::Chunk(format!("{tag}: {e}")))?;
     Ok(b)
+}
+
+fn u32_at(bytes: &[u8], pos: usize) -> Result<u32, FileError> {
+    bytes.get(pos..pos + 4).map(|b| u32::from_le_bytes(b.try_into().unwrap())).ok_or(FileError::Truncated)
+}
+
+/// A `MODS` chunk. Modifier kinds this build does not know are skipped.
+fn read_modifiers(payload: &[u8]) -> Result<Vec<Modifier>, FileError> {
+    let count = u32_at(payload, 0)? as usize;
+    let mut pos = 4;
+    let mut out = Vec::with_capacity(count);
+    for _ in 0..count {
+        let kind = u32_at(payload, pos)?;
+        let len = u32_at(payload, pos + 4)? as usize;
+        pos += 8;
+        let bytes = payload.get(pos..pos + len).ok_or(FileError::Truncated)?;
+        pos += len;
+        match kind {
+            0 => out.push(Modifier::Mirror(read_block::<MirrorProps>(bytes, "MODS")?)),
+            1 => out.push(Modifier::Subsurf(read_block::<SubsurfProps>(bytes, "MODS")?)),
+            _ => {}
+        }
+    }
+    Ok(out)
 }
 
 /// Parse a document. Unknown chunk tags are skipped.
@@ -166,7 +204,13 @@ pub fn load(bytes: &[u8]) -> Result<Doc, FileError> {
                 }
                 let props: MeshProps = read_block(&payload[4..4 + props_len], "MESH")?;
                 let mesh = mesh_io::read(&payload[4 + props_len..]).map_err(|e| FileError::Chunk(format!("MESH: {e}")))?;
-                doc.meshes.insert(id, MeshBlock { props, mesh, edit: Default::default() });
+                doc.meshes.insert(id, MeshBlock { props, mesh, edit: Default::default(), modifiers: Vec::new(), modifiers_version: 0 });
+            }
+            b"MODS" => {
+                let mods = read_modifiers(payload)?;
+                if let Some(block) = doc.meshes.get_mut(id) {
+                    block.modifiers = mods;
+                }
             }
             _ => {} // unknown chunk from a newer build: skip
         }
@@ -193,6 +237,28 @@ pub fn load_file(path: &Path) -> Result<Doc, FileError> {
 mod tests {
     use super::*;
     use prism_math::Vec3;
+
+    #[test]
+    fn modifiers_ride_along_in_their_own_chunk() {
+        let mut doc = Doc::starter();
+        let cube = doc.scene_objects()[0];
+        let mesh = doc.objects.get(cube).unwrap().data;
+        let block = doc.meshes.get_mut(mesh).unwrap();
+        block.modifiers.push(Modifier::Mirror(MirrorProps { y: true, merge_distance: 0.25, ..MirrorProps::default() }));
+        block.modifiers.push(Modifier::Subsurf(SubsurfProps { levels: 3, smooth: false }));
+        let bytes = save(&doc);
+        let back = load(&bytes).unwrap();
+        let mods = &back.meshes.get(mesh).unwrap().modifiers;
+        assert_eq!(mods.len(), 2);
+        match (&mods[0], &mods[1]) {
+            (Modifier::Mirror(m), Modifier::Subsurf(s)) => {
+                assert!(m.x && m.y && !m.z && m.merge && (m.merge_distance - 0.25).abs() < 1e-12);
+                assert_eq!((s.levels, s.smooth), (3, false));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(save(&back), bytes, "stable across a round trip");
+    }
 
     #[test]
     fn roundtrip_byte_for_byte() {

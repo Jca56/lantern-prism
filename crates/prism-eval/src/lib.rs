@@ -4,5 +4,7 @@
 //! never changes.
 
 pub mod mesh_buffers;
+pub mod modifiers;
 
 pub use mesh_buffers::{MeshBuffers, evaluate};
+pub use modifiers::{EvalMesh, apply_modifiers};

@@ -1301,6 +1301,7 @@ name = "prism-eval"
 version = "0.1.0"
 dependencies = [
  "prism-core",
+ "prism-doc",
  "prism-geom",
  "prism-math",
  "prism-mesh",
@@ -1333,6 +1334,7 @@ version = "0.1.0"
 dependencies = [
  "prism-core",
  "prism-doc",
+ "prism-eval",
  "prism-math",
  "prism-mesh",
  "prism-props",
