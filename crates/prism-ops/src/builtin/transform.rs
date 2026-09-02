@@ -18,7 +18,7 @@ mod targets;
 #[cfg(test)]
 pub(crate) mod tests;
 
-use targets::{Op, Targets, apply, has_targets};
+use targets::{Op, Targets, apply, dominant_axis, has_targets};
 
 /// Modal transforms take every event while they run.
 pub(crate) const INTERACTIVE: OpFlags = OpFlags(OpFlags::DEFAULT.0 | OpFlags::BLOCKING.0);
@@ -130,6 +130,10 @@ pub struct TransformModal {
     /// angle seen, so the sweep accumulates across events.
     angle: f64,
     last_angle: f64,
+    /// Mirror editing is on (the scene's tool setting when the drag began).
+    mirror: bool,
+    /// The mirror plane's normal, locked once the drag shows a direction.
+    mirror_axis: Option<Vec3>,
 }
 
 enum Step {
@@ -161,7 +165,22 @@ impl TransformModal {
         self.release_confirm = starts_drag(event);
         self.angle = 0.0;
         self.last_angle = screen_angle(&view, self.pivot, self.start);
+        self.mirror = ctx.doc.scene().is_some_and(|s| s.tool.mirror);
+        self.mirror_axis = None;
         Ok(view)
+    }
+
+    /// The mirror plane for a move: the constraint axis, else the world axis
+    /// the drag first leaned along, kept for the rest of the drag.
+    fn mirror_axis(&mut self, delta: Vec3) -> Vec3 {
+        if let Some(a) = self.mirror_axis {
+            return a;
+        }
+        let a = self.constraint.unwrap_or_else(|| dominant_axis(delta));
+        if self.constraint.is_some() || delta.length() > 1e-9 {
+            self.mirror_axis = Some(a);
+        }
+        a
     }
 
     fn step(&mut self, event: &Event) -> Step {
@@ -249,12 +268,21 @@ props! {
         pub delta: Vec3 = Vec3::ZERO => { id: 1, subtype: Translation },
         /// Axis the drag was constrained to (X / Y / Z while moving).
         pub axis: Axis = Axis::Free => { id: 2 },
+        /// Mirror editing: the far side of the pivot moves the opposite way.
+        pub mirror: bool = false => { id: 3 },
     }
 }
 
 fn report_move(ctx: &mut Ctx, p: &TranslateProps) {
     let d = p.delta;
-    ctx.report(format!("Move  X {:+.3}  Y {:+.3}  Z {:+.3}{}", d.x, d.y, d.z, p.axis.tag()));
+    let mirror = if p.mirror { "  · mirror" } else { "" };
+    ctx.report(format!("Move  X {:+.3}  Y {:+.3}  Z {:+.3}{}{mirror}", d.x, d.y, d.z, p.axis.tag()));
+}
+
+/// The mirror plane a recorded move used: its constraint axis, else the axis
+/// its delta leans along.
+fn mirror_plane(p: &TranslateProps) -> Option<Vec3> {
+    p.mirror.then(|| p.axis.dir().unwrap_or_else(|| dominant_axis(p.delta)))
 }
 
 pub struct Translate;
@@ -271,23 +299,27 @@ impl Operator for Translate {
         let Some(t) = Targets::gather(ctx.doc) else {
             return Ok(Outcome::Cancelled);
         };
-        apply(ctx.doc, &t, t.pivot(), Op::Translate(p.delta));
+        apply(ctx.doc, &t, t.pivot(), Op::Translate { delta: p.delta, mirror: mirror_plane(p) });
         Ok(Outcome::Finished)
     }
     fn invoke(ctx: &mut Ctx, p: &mut TranslateProps, event: &Event, m: &mut TransformModal) -> OpResult<Flow> {
         if let Err(why) = m.begin(ctx, event, p.axis) {
             return cancelled(ctx, Self::LABEL, why);
         }
+        p.mirror = m.mirror;
         report_move(ctx, p);
         Ok(Flow::Running)
     }
     fn modal(m: &mut TransformModal, ctx: &mut Ctx, p: &mut TranslateProps, event: &Event) -> OpResult<Flow> {
         match m.step(event) {
             Step::Update => {
-                if let (Some(view), Some(t)) = (ctx.view, m.targets.as_ref()) {
+                if let Some(view) = ctx.view {
                     p.delta = m.translation(&view);
                     p.axis = m.axis();
-                    apply(ctx.doc, t, m.pivot, Op::Translate(p.delta));
+                    let mirror = p.mirror.then(|| m.mirror_axis(p.delta));
+                    if let Some(t) = m.targets.as_ref() {
+                        apply(ctx.doc, t, m.pivot, Op::Translate { delta: p.delta, mirror });
+                    }
                 }
                 report_move(ctx, p);
                 Ok(Flow::Running)

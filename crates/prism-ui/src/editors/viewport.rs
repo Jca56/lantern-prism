@@ -77,6 +77,12 @@ pub fn header(ui: &mut Ui, ctx: &mut EditorCtx) {
             vp.gizmo = g;
         }
     }
+    let mirror = ctx.doc.scene().is_some_and(|s| s.tool.mirror);
+    if ui.icon_button("mirror", Icon::Mirror, mirror, "Mirror: the far side of the pivot moves the opposite way").clicked
+        && let Some(s) = ctx.doc.scene_mut()
+    {
+        s.tool.mirror = !mirror;
+    }
     ui.alloc(Vec2::new(gap, 1.0));
     ui.toggle("Wire", &mut vp.overlays.wire);
     if let Some(i) = ui.menu_button("View", &["Perspective / Ortho", "Front", "Back", "Right", "Left", "Top", "Bottom", "Frame All", "Frame Selected"]) {

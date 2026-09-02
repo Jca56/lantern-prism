@@ -22,6 +22,8 @@ pub enum Icon {
     Scale,
     /// Object mode: a cube as a whole.
     Object,
+    /// Mirror editing: arrows parting from a centre line.
+    Mirror,
 }
 
 /// The icon for a gizmo mode.
@@ -138,6 +140,16 @@ pub fn draw(d: &mut DrawList, rect: Rect, icon: Icon, color: Color, stroke: f64)
             d.line(f.max, f.max + o, stroke, color);
             d.line(f.min + o, tr + o, stroke, color);
             d.line(tr + o, f.max + o, stroke, color);
+        }
+        Icon::Mirror => {
+            d.line(p(0.0, -1.0), p(0.0, 1.0), stroke, color);
+            let h = s * 0.4;
+            for dx in [-1.0, 1.0] {
+                let tip = p(dx, 0.0);
+                d.line(p(dx * 0.25, 0.0), tip, stroke, color);
+                d.line(tip, tip + Vec2::new(-dx * h, -h), stroke, color);
+                d.line(tip, tip + Vec2::new(-dx * h, h), stroke, color);
+            }
         }
         Icon::Camera => {
             let body = Rect::from_center_size(p(-0.2, 0.1), Vec2::new(s * 1.6, s * 1.1));

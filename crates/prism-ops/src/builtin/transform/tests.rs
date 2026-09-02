@@ -154,6 +154,56 @@ fn edit_mode_moves_the_selected_vertices() {
     assert!((max_x(&doc) - 1.0).abs() < 1e-9);
 }
 
+/// Every vertex of the cube selected is the same as its two opposite faces
+/// on any axis, so a mirrored move must pull the halves apart.
+#[test]
+fn mirror_moves_the_far_side_the_opposite_way() {
+    let (mut doc, mut ex, cube) = selected_cube();
+    ex.run_with("object.mode_set", &[("mode", Value::Enum(1))], &mut Ctx::new(&mut doc)).unwrap();
+    ex.run_with("mesh.select_all", &[("action", Value::Enum(1))], &mut Ctx::new(&mut doc)).unwrap();
+    doc.scene_mut().unwrap().tool.mirror = true;
+    let close = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9;
+    let extent = |doc: &Doc, pick: fn(Vec3) -> f64| {
+        let m = &doc.object_mesh(cube).unwrap().mesh;
+        let vals: Vec<f64> = m.verts().map(|v| pick(m.position(v))).collect();
+        (vals.iter().copied().fold(f64::MAX, f64::min), vals.iter().copied().fold(f64::MIN, f64::max))
+    };
+    // Constrained to X: one unit right widens the cube by one unit each way.
+    let mut c = ctx(&mut doc, Vec2::new(400.0, 400.0));
+    ex.invoke_with("transform.translate", &[("axis", Value::Enum(1))], &mut c, &key('g')).unwrap();
+    ex.modal_event(&mut c, &moved(Vec2::new(480.0, 400.0)));
+    assert!(close(extent(c.doc, |p| p.x), (-2.0, 2.0)), "the far side mirrors");
+    assert!(ex.last_report.as_deref().unwrap().contains("mirror"));
+    ex.modal_event(&mut c, &escape());
+    assert!(close(extent(&doc, |p| p.x), (-1.0, 1.0)));
+
+    // Free drag up and to the right: X is the mirror plane (the lean), so the
+    // halves part along X while both rise together.
+    let mut c = ctx(&mut doc, Vec2::new(400.0, 400.0));
+    ex.invoke_with("transform.translate", &[], &mut c, &key('g')).unwrap();
+    ex.modal_event(&mut c, &moved(Vec2::new(488.0, 320.0)));
+    assert_eq!(ex.modal_event(&mut c, &click()), Some(Ok(Flow::Finished)));
+    let (x0, x1) = extent(&doc, |p| p.x);
+    let (y0, y1) = extent(&doc, |p| p.y);
+    assert!((x0 + 2.1).abs() < 1e-9 && (x1 - 2.1).abs() < 1e-9, "{x0} {x1}");
+    assert!((y0 - 0.0).abs() < 1e-9 && (y1 - 2.0).abs() < 1e-9, "{y0} {y1}");
+    // The step remembers it was mirrored, so adjusting keeps the symmetry.
+    let (_, props) = ex.last_step_props().unwrap();
+    assert_eq!(props.get_by_name("mirror"), Some(Value::Bool(true)));
+    props.set_by_name("delta", Value::Vec3(Vec3::new(0.5, 0.0, 0.0))).unwrap();
+    ex.adjust_last(&mut Ctx::new(&mut doc)).unwrap();
+    assert!(close(extent(&doc, |p| p.x), (-1.5, 1.5)));
+
+    // Off again: a plain move slides everything the same way. (Undo first:
+    // the snapshot carries the tool setting too.)
+    ex.undo(&mut doc);
+    doc.scene_mut().unwrap().tool.mirror = false;
+    let mut c = ctx(&mut doc, Vec2::new(400.0, 400.0));
+    ex.invoke_with("transform.translate", &[], &mut c, &key('g')).unwrap();
+    ex.modal_event(&mut c, &moved(Vec2::new(480.0, 400.0)));
+    assert!(close(extent(c.doc, |p| p.x), (0.0, 2.0)));
+}
+
 #[test]
 fn needs_a_view_and_a_selection() {
     let mut doc = Doc::starter();

@@ -66,10 +66,28 @@ impl Targets {
     }
 }
 
+/// How close to the mirror plane counts as being on it (world units).
+const MIRROR_EPS: f64 = 1e-6;
+
+/// The world axis a vector leans along most (ties go X, Y, Z).
+pub(super) fn dominant_axis(v: Vec3) -> Vec3 {
+    let a = v.abs();
+    if a.x >= a.y && a.x >= a.z {
+        Vec3::X
+    } else if a.y >= a.z {
+        Vec3::Y
+    } else {
+        Vec3::Z
+    }
+}
+
 /// A transform in world space about a pivot.
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Op {
-    Translate(Vec3),
+    /// Move by `delta`. With `mirror`, points on the far side of the plane
+    /// through the pivot with that normal get the reflected delta, and points
+    /// on the plane stay on it.
+    Translate { delta: Vec3, mirror: Option<Vec3> },
     Rotate { axis: Vec3, angle: f64 },
     Scale(Vec3),
 }
@@ -77,7 +95,21 @@ pub(super) enum Op {
 impl Op {
     fn point(self, pivot: Vec3, p: Vec3) -> Vec3 {
         match self {
-            Op::Translate(d) => p + d,
+            Op::Translate { delta, mirror } => {
+                p + match mirror {
+                    Some(a) => {
+                        let side = (p - pivot).dot(a);
+                        if side < -MIRROR_EPS {
+                            delta - a * (2.0 * delta.dot(a))
+                        } else if side > MIRROR_EPS {
+                            delta
+                        } else {
+                            delta - a * delta.dot(a)
+                        }
+                    }
+                    None => delta,
+                }
+            }
             Op::Rotate { axis, angle } => pivot + Quat::from_axis_angle(axis, angle) * (p - pivot),
             Op::Scale(f) => pivot + (p - pivot) * f,
         }
@@ -100,7 +132,7 @@ pub(super) fn apply(doc: &mut Doc, targets: &Targets, pivot: Vec3, op: Op) {
                         o.rotation = Vec3::new(x, y, z);
                     }
                     Op::Scale(f) => o.scale = scale0 * f,
-                    Op::Translate(_) => {}
+                    Op::Translate { .. } => {}
                 }
             }
         }

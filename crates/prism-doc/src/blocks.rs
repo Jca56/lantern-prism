@@ -21,6 +21,10 @@ props! {
     pub struct ToolSettings {
         pub select_mode: SelectMode = SelectMode::Vertex => { id: 1, label: "Select Mode" },
         pub merge_distance: f64 = 0.0001 => { id: 2, hard: 0.0.., soft: 0.0..=1.0, subtype: Distance },
+        /// Mirror editing: when moving, the side of the selection on the far
+        /// side of the pivot gets the reflected movement, so opposite faces
+        /// move apart or together instead of sliding the same way.
+        pub mirror: bool = false => { id: 3 },
     }
 }
 

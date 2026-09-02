@@ -365,6 +365,14 @@ widgets, keeping motion, middle-drag and wheel so the view still navigates.
 Every operator the UI starts goes through `invoke` (menus and keys pass the
 click that chose them, already released): plain operators finish at once,
 interactive ones keep running.
+*Amended 2026-09-02 (Alva: "select opposite faces … mirror their
+movements"):* **Mirror editing** is a scene tool setting (header toggle).
+While on, a move splits the selection by the plane through the pivot whose
+normal is the constraint axis (else the world axis the drag first leans
+along): the near side takes the delta, the far side takes the delta
+reflected in that plane, and points on the plane stay on it. Opposite faces
+part or meet; dragging sideways still carries both along. Recorded on the
+step so Adjust Last Operation keeps the symmetry.
 The interaction model, settling the open question: **gizmo-driven**. The
 viewport shows one gizmo at a time (Move, Rotate or Scale, big handles) and
 **R cycles** between them; there are no G/R/S grab hotkeys. Gizmo and box
