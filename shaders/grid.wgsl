@@ -1,6 +1,8 @@
 // Infinite XZ grid and the viewport background, from one fullscreen
-// triangle. Rays are reconstructed per pixel; the plane hit writes real depth
-// so geometry occludes the grid correctly.
+// triangle. Rays are reconstructed per pixel; a grid line writes the plane's
+// real depth so geometry above the floor hides it, but the floor between the
+// lines writes none, so geometry below the floor shows through (the lines
+// then draw over it, as in Blender).
 #include "common3d.wgsl"
 
 struct VsOut {
@@ -81,7 +83,8 @@ fn fs_main(in: VsOut) -> FsOut {
     alpha = alpha * fade * grazing;
 
     let clip = view.view_proj * vec4<f32>(hit_rel, 1.0);
-    out.depth = clip.z / clip.w;
+    // Only a visible line is solid; the floor itself is see-through.
+    out.depth = select(0.0, clip.z / clip.w, alpha > 0.02);
     out.color = vec4<f32>(mix(view.bg.rgb, color.rgb, alpha), 1.0);
     return out;
 }

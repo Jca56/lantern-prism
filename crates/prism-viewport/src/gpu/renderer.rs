@@ -221,7 +221,8 @@ impl Renderer {
             pass.set_viewport(x as f32, y as f32, w as f32, h as f32, 0.0, 1.0);
             pass.set_scissor_rect(x, y, w, h);
             pass.set_bind_group(0, &self.views.bind_group, &[vp.view_offset]);
-            // Grid first: it also paints the background and initial depth.
+            // Grid first: it also paints the background, and writes depth
+            // only where a line shows, so geometry below the floor stays visible.
             // It ignores groups 1 and 2 but the shared layout wants them bound.
             pass.set_bind_group(1, &self.objects.bind_group, &[0]);
             pass.set_bind_group(2, &self.dummy_flags, &[]);
