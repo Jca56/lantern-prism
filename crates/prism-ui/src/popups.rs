@@ -3,12 +3,12 @@
 //! outside press closes them. Menus let that press fall through to whatever
 //! is underneath (one click dismisses *and* selects); dialogs swallow it.
 
-use prism_doc::{Doc, ObjectMode};
+use prism_doc::{DataKind, Doc, ObjectMode};
 use prism_math::{Rect, Vec2};
 use prism_ops::{Ctx, Executor, UiRequest, ViewInfo};
 use prism_props::Value;
 
-use crate::context_menu::{ContextMenu, Item, Tint, Width};
+use crate::context_menu::{ContextMenu, Item, Width};
 use crate::editors::{record_edit, run_op};
 use crate::event::Key;
 use crate::state::CursorIcon;
@@ -255,8 +255,8 @@ pub fn draw(
 }
 
 /// The context menu: content on layer 2 measured as it lays out, then its
-/// panel painted on layer 1 underneath; tool strip floating to the left;
-/// one open submenu to the right.
+/// panel painted on layer 1 underneath; an Object | Edit bar above it, the
+/// tool strip floating down the left, one open submenu to the right.
 fn draw_context(ui: &mut Ui, menu: &mut ContextMenu, window: Rect, host: &mut Host) -> PopupResult {
     let mut out = PopupResult::default();
     if ui.state.take_key(|k| k.key == Key::Escape).is_some() {
@@ -268,18 +268,23 @@ fn draw_context(ui: &mut Ui, menu: &mut ContextMenu, window: Rect, host: &mut Ho
         Width::Wide => m.px(440.0),
     };
     let strip_w = m.widget_h;
+    let bar_h = m.widget_h;
     let strip_h = menu.tools.len() as f64 * (m.widget_h + m.gap);
     let est_h = if menu.height > 0.0 { menu.height } else { m.widget_h * 8.0 };
     let min_x = window.min.x + strip_w + m.gap * 2.0;
+    let min_y = window.min.y + bar_h + m.gap;
     let x = menu.pos.x.clamp(min_x, (window.max.x - width).max(min_x));
-    let y = menu.pos.y.clamp(window.min.y, (window.max.y - est_h).max(window.min.y));
+    let y = menu.pos.y.clamp(min_y, (window.max.y - est_h).max(min_y));
     let panel = Rect::from_min_size(Vec2::new(x, y), Vec2::new(width, est_h));
-    let strip = Rect::from_min_size(Vec2::new(panel.min.x - m.gap - strip_w, panel.min.y), Vec2::new(strip_w, strip_h.max(1.0)));
+    // Object | Edit sit in a bar above the panel; the tool strip runs down the
+    // left from the bar's top, so the two frame the panel like an L.
+    let bar = Rect::from_min_size(Vec2::new(panel.min.x, panel.min.y - m.gap - bar_h), Vec2::new(width, bar_h));
+    let strip = Rect::from_min_size(Vec2::new(panel.min.x - m.gap - strip_w, bar.min.y), Vec2::new(strip_w, strip_h.max(1.0)));
     let sub_w = m.px(300.0);
     // The submenu opens beside the panel, on the left when the right is full.
     let sub_x = if panel.max.x + m.gap + sub_w <= window.max.x { panel.max.x + m.gap } else { strip.min.x - m.gap - sub_w };
     let sub_area = Rect::from_min_size(Vec2::new(sub_x, panel.min.y), Vec2::new(sub_w, est_h));
-    let mut hit = panel.union(&strip);
+    let mut hit = panel.union(&strip).union(&bar);
     if menu.open_sub.is_some() {
         hit = hit.union(&sub_area);
     }
@@ -437,15 +442,47 @@ fn draw_context(ui: &mut Ui, menu: &mut ContextMenu, window: Rect, host: &mut Ho
         ui.draw.set_layer(2);
     }
 
+    // ---- mode bar: Object | Edit, the active one lit in the mode colour ---------
+    let subject = menu.subject.and_then(|id| host.doc.objects.get(id)).or_else(|| host.doc.active_object());
+    let editing = subject.is_some_and(|o| o.mode == ObjectMode::Edit);
+    let can_edit = subject.is_some_and(|o| o.kind == DataKind::Mesh);
+    let half = ((bar.width() - m.gap) * 0.5).floor();
+    let style = ui.text_style();
+    let modes = [("Object", false, "Object mode: move, rotate and scale whole objects"), ("Edit", true, "Edit mode: work on the mesh's vertices, edges and faces")];
+    for (i, (label, edit, tip)) in modes.into_iter().enumerate() {
+        let rect = Rect::from_min_size(Vec2::new(bar.min.x + i as f64 * (half + m.gap), bar.min.y), Vec2::new(half, bar.height()));
+        let enabled = !edit || can_edit;
+        let r = ui.interact(ui.id("mode").with_index(i), rect, if enabled { Sense::CLICK } else { Sense::NONE });
+        if r.hovered && enabled {
+            ui.state.cursor_icon = CursorIcon::Pointer;
+        }
+        let active = editing == edit;
+        let ink = if active {
+            let face = ui.theme.mode_color(edit);
+            if r.hovered {
+                ui.hover_glow(rect, face);
+            }
+            ui.raised(rect, face, r.held);
+            ui.theme.mode_text(edit)
+        } else {
+            ui.button_face(rect, &r);
+            if enabled { ui.theme.text } else { ui.theme.text_dim }
+        };
+        ui.text_centered(label, &style, rect, ink);
+        ui.tooltip(&r, if enabled { tip } else { "Edit mode needs a mesh" });
+        if r.clicked && !active {
+            host.run("object.mode_set", &[("mode".to_owned(), Value::Enum(edit as i64))]);
+            out.refresh = true;
+            ui.state.request_rebuild = true;
+        }
+    }
+
     // ---- tool strip -------------------------------------------------------------
     let mut ty = strip.min.y;
     for (i, t) in menu.tools.iter().enumerate() {
         let rect = Rect::from_min_size(Vec2::new(strip.min.x, ty), Vec2::splat(strip_w));
-        let lit = t.active.then(|| match t.tint {
-            Tint::Accent => (ui.theme.accent, ui.theme.accent_text),
-            Tint::Mode { edit } => (ui.theme.mode_color(edit), ui.theme.mode_text(edit)),
-        });
-        let r = ui.icon_button_in(ui.id("tool").with_index(i), rect, t.icon, lit);
+        let lit = t.active.then_some((ui.theme.accent, ui.theme.accent_text));
+        let r = ui.icon_button_in(ui.id("tool").with_index(i), rect, t.icon, lit, &t.tip);
         if r.clicked {
             host.run(&t.op, &t.overrides);
             out.refresh = true;

@@ -15,16 +15,16 @@ use crate::state::CursorIcon;
 use crate::theme::Metrics;
 use crate::ui::Ui;
 
-/// Arrow length and ring radius, logical px.
-const LENGTH: f64 = 110.0;
+/// Arrow length and ring radius, logical px. Big on purpose (Alva).
+const LENGTH: f64 = 160.0;
 /// How close the pointer must be to grab a handle, logical px.
-const GRAB: f64 = 16.0;
-const STROKE: f64 = 4.0;
-const HEAD: f64 = 20.0;
+const GRAB: f64 = 22.0;
+const STROKE: f64 = 6.0;
+const HEAD: f64 = 30.0;
 /// Radius of the free handle in the middle.
-const CENTER: f64 = 14.0;
+const CENTER: f64 = 20.0;
 /// The free rotation ring sits outside the axis rings.
-const OUTER_RING: f64 = 1.3;
+const OUTER_RING: f64 = 1.25;
 const RING_STEPS: usize = 48;
 
 const AXES: [GizmoHandle; 3] = [GizmoHandle::X, GizmoHandle::Y, GizmoHandle::Z];
@@ -246,10 +246,10 @@ mod tests {
         assert_eq!(hs.len(), 4);
         let Shape::Segment(a, b) = &hs[0].shape else { panic!("X is an arrow") };
         assert!((*a - Vec2::new(400.0, 400.0)).length() < 1e-6);
-        assert!((*b - Vec2::new(510.0, 400.0)).length() < 1e-6, "110 px long regardless of zoom: {b:?}");
+        assert!((*b - Vec2::new(400.0 + LENGTH, 400.0)).length() < 1e-6, "LENGTH px long regardless of zoom: {b:?}");
         // Y points up on screen; Z points at the camera, so it collapses.
         let Shape::Segment(_, y_tip) = &hs[1].shape else { panic!() };
-        assert!((*y_tip - Vec2::new(400.0, 290.0)).length() < 1e-6);
+        assert!((*y_tip - Vec2::new(400.0, 400.0 - LENGTH)).length() < 1e-6);
         assert_eq!(nearest(&hs, Vec2::new(470.0, 406.0), 16.0).map(|i| hs[i].which), Some(GizmoHandle::X));
         assert_eq!(nearest(&hs, Vec2::new(404.0, 396.0), 16.0).map(|i| hs[i].which), Some(GizmoHandle::Free), "the disc wins near the pivot");
         assert_eq!(nearest(&hs, Vec2::new(600.0, 600.0), 16.0), None);
@@ -260,9 +260,9 @@ mod tests {
         let m = Theme::default().metrics(1.0);
         let hs = handles(GizmoMode::Rotate, &view(), Vec3::ZERO, &m).unwrap();
         assert_eq!(hs.len(), 4);
-        // The Z ring lies in the view plane: a 110 px circle around the pivot.
+        // The Z ring lies in the view plane: a LENGTH px circle around the pivot.
         let z = hs.iter().find(|h| h.which == GizmoHandle::Z).unwrap();
-        assert!(z.shape.distance(Vec2::new(510.0, 400.0)) < 1.0);
+        assert!(z.shape.distance(Vec2::new(400.0 + LENGTH, 400.0)) < 1.0);
         assert!(z.shape.distance(Vec2::new(400.0, 400.0)) > 100.0);
         assert!(seg_dist(Vec2::new(0.0, 5.0), Vec2::ZERO, Vec2::new(10.0, 0.0)) - 5.0 < 1e-9);
         assert!(seg_dist(Vec2::new(20.0, 0.0), Vec2::ZERO, Vec2::new(10.0, 0.0)) - 10.0 < 1e-9, "clamped to the end");

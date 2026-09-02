@@ -59,21 +59,21 @@ fn pick_mode(ctx: &EditorCtx) -> PickMode {
 pub fn header(ui: &mut Ui, ctx: &mut EditorCtx) {
     let vp = &mut *ctx.viewport;
     let gap = ui.m.gap;
-    if ui.icon_button("solid", Icon::Solid, vp.shading == Shading::Solid).clicked {
+    if ui.icon_button("solid", Icon::Solid, vp.shading == Shading::Solid, "Solid shading").clicked {
         vp.shading = Shading::Solid;
     }
-    if ui.icon_button("wireframe", Icon::Wire, vp.shading == Shading::Wire).clicked {
+    if ui.icon_button("wireframe", Icon::Wire, vp.shading == Shading::Wire, "Wireframe shading").clicked {
         vp.shading = Shading::Wire;
     }
-    if ui.icon_button("grid", Icon::Grid, vp.overlays.grid).clicked {
+    if ui.icon_button("grid", Icon::Grid, vp.overlays.grid, "Grid on / off").clicked {
         vp.overlays.grid = !vp.overlays.grid;
     }
-    if ui.icon_button("frame", Icon::Frame, false).clicked {
+    if ui.icon_button("frame", Icon::Frame, false, "Frame everything in view").clicked {
         ctx.requests.push(UiRequest::ViewFrame { selected: false });
     }
     ui.alloc(Vec2::new(gap, 1.0));
     for g in GizmoMode::ALL {
-        if ui.icon_button(g.label(), gizmo_icon(g), vp.gizmo == g).clicked {
+        if ui.icon_button(g.label(), gizmo_icon(g), vp.gizmo == g, &format!("{} gizmo · R cycles", g.label())).clicked {
             vp.gizmo = g;
         }
     }

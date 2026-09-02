@@ -43,20 +43,12 @@ pub struct Tab {
     pub items: Vec<Item>,
 }
 
-/// What colour an active tool lights up in.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Tint {
-    /// The theme's "on" gold.
-    Accent,
-    /// The mode's colour: blue for Object, gold for Edit.
-    Mode { edit: bool },
-}
-
 #[derive(Clone, Debug)]
 pub struct Tool {
     pub icon: Icon,
     pub active: bool,
-    pub tint: Tint,
+    /// Tooltip.
+    pub tip: String,
     pub op: String,
     pub overrides: Vec<(String, Value)>,
 }
@@ -74,6 +66,9 @@ pub struct ContextMenu {
     pub tabs: Vec<Tab>,
     pub tab: usize,
     pub tools: Vec<Tool>,
+    /// The object the Object / Edit bar speaks for: the one under the
+    /// pointer, or the owner of the mesh being edited.
+    pub subject: Option<Id>,
     pub pos: Vec2,
     pub width: Width,
     /// Submenu open in the current tab, by item index.
@@ -86,21 +81,8 @@ fn act(label: &str, op: &str, overrides: Vec<(&str, Value)>) -> Item {
     Item::Action { label: label.into(), op: op.into(), overrides: overrides.into_iter().map(|(k, v)| (k.to_owned(), v)).collect() }
 }
 
-fn tool(icon: Icon, active: bool, op: &str, overrides: Vec<(&str, Value)>) -> Tool {
-    Tool { icon, active, tint: Tint::Accent, op: op.into(), overrides: overrides.into_iter().map(|(k, v)| (k.to_owned(), v)).collect() }
-}
-
-/// Object / Edit at the top of every viewport menu's strip, lit in the mode
-/// colour. Edit only shows when the menu's subject (else the active object)
-/// is a mesh.
-fn mode_tools(doc: &Doc, subject: Option<Id>) -> Vec<Tool> {
-    let obj = subject.and_then(|id| doc.objects.get(id)).or_else(|| doc.active_object());
-    let editing = obj.is_some_and(|o| o.mode == ObjectMode::Edit);
-    let mut tools = vec![Tool { tint: Tint::Mode { edit: false }, ..tool(Icon::Object, !editing, "object.mode_set", vec![("mode", Value::Enum(0))]) }];
-    if obj.is_some_and(|o| o.kind == DataKind::Mesh) {
-        tools.push(Tool { tint: Tint::Mode { edit: true }, ..tool(Icon::EditMode, editing, "object.mode_set", vec![("mode", Value::Enum(1))]) });
-    }
-    tools
+fn tool(icon: Icon, active: bool, tip: &str, op: &str, overrides: Vec<(&str, Value)>) -> Tool {
+    Tool { icon, active, tip: tip.into(), op: op.into(), overrides: overrides.into_iter().map(|(k, v)| (k.to_owned(), v)).collect() }
 }
 
 fn op_panel(exec: &Executor, op: &str) -> Option<Item> {
@@ -128,7 +110,10 @@ fn view_items() -> Vec<Item> {
 
 /// Which gizmo shows (D024). Shading, grid and framing live in the header.
 fn gizmo_tools(view: ViewFlags) -> Vec<Tool> {
-    GizmoMode::ALL.iter().map(|&g| tool(gizmo_icon(g), view.gizmo == g, "view3d.gizmo", vec![("mode", Value::Enum(g.index() as i64))])).collect()
+    GizmoMode::ALL
+        .iter()
+        .map(|&g| tool(gizmo_icon(g), view.gizmo == g, &format!("{} gizmo · R cycles", g.label()), "view3d.gizmo", vec![("mode", Value::Enum(g.index() as i64))]))
+        .collect()
 }
 
 /// Viewport display state the menu reflects in its tool strip.
@@ -141,14 +126,12 @@ pub struct ViewFlags {
 
 impl ContextMenu {
     pub fn build(context: MenuContext, doc: &Doc, exec: &Executor, pos: Vec2, view: ViewFlags) -> ContextMenu {
-        // The object the mode buttons speak for: the one under the pointer,
-        // or the owner of the mesh being edited.
         let subject = match context {
             MenuContext::Object(id) => Some(id),
             MenuContext::Mesh(m) | MenuContext::Element { mesh: m, .. } => doc.scene_objects().into_iter().find(|&id| doc.objects.get(id).is_some_and(|o| o.data == m)),
             MenuContext::Scene => None,
         };
-        let mut tools = mode_tools(doc, subject);
+        let mut tools: Vec<Tool> = Vec::new();
         let (title, tabs, width) = match context {
             MenuContext::Scene => {
                 let select = vec![
@@ -220,15 +203,15 @@ impl ContextMenu {
                     act("Invert", "mesh.select_all", vec![("action", Value::Enum(3))]),
                 ];
                 tools.extend([
-                    tool(Icon::Vertex, mode == SelectMode::Vertex, "mesh.select_mode", vec![("mode", Value::Enum(0))]),
-                    tool(Icon::Edge, mode == SelectMode::Edge, "mesh.select_mode", vec![("mode", Value::Enum(1))]),
-                    tool(Icon::Face, mode == SelectMode::Face, "mesh.select_mode", vec![("mode", Value::Enum(2))]),
+                    tool(Icon::Vertex, mode == SelectMode::Vertex, "Select vertices", "mesh.select_mode", vec![("mode", Value::Enum(0))]),
+                    tool(Icon::Edge, mode == SelectMode::Edge, "Select edges", "mesh.select_mode", vec![("mode", Value::Enum(1))]),
+                    tool(Icon::Face, mode == SelectMode::Face, "Select faces", "mesh.select_mode", vec![("mode", Value::Enum(2))]),
                 ]);
                 (title, vec![Tab { label: "Edit".into(), items: edit }, Tab { label: "Select".into(), items: select }], Width::Wide)
             }
         };
         tools.extend(gizmo_tools(view));
-        ContextMenu { context, title, tabs, tab: 0, tools, pos, width, open_sub: None, height: 0.0 }
+        ContextMenu { context, title, tabs, tab: 0, tools, subject, pos, width, open_sub: None, height: 0.0 }
     }
 
     /// The menu for whatever the viewport pick returned.
@@ -258,10 +241,10 @@ mod tests {
         assert_eq!(scene.tabs.iter().map(|t| t.label.as_str()).collect::<Vec<_>>(), vec!["Add", "View", "Select"]);
         assert_eq!(scene.tabs[0].items.len(), 6);
         assert!(!scene.tools.iter().any(|t| t.icon == Icon::Plus), "Add lives in its tab");
-        assert_eq!(scene.tools[0].icon, Icon::Object, "the mode buttons lead the strip");
-        assert!(scene.tools[0].active && scene.tools[0].tint == Tint::Mode { edit: false });
         assert!(scene.tools.iter().all(|t| !matches!(t.icon, Icon::Solid | Icon::Wire | Icon::Grid | Icon::Frame)), "view tools moved to the header");
-        assert!(scene.tools.iter().any(|t| t.icon == Icon::Move && t.active), "the current gizmo is lit");
+        assert_eq!(scene.tools[0].icon, Icon::Move, "the strip is the gizmo in object mode");
+        assert!(scene.tools[0].active && scene.tools[0].tip.contains("R cycles"), "the current gizmo is lit and explained");
+        assert_eq!(scene.subject, None, "nothing under the pointer: the mode bar follows the active object");
 
         let cube = doc.scene_objects()[0];
         let obj = ContextMenu::build(MenuContext::Object(cube), &doc, &exec, Vec2::ZERO, ViewFlags::default());
@@ -270,13 +253,15 @@ mod tests {
         assert!(!obj.tabs[0].items.iter().any(|i| matches!(i, Item::Action { op, .. } if op == "object.mode_set")), "mode lives on the strip");
         assert!(obj.tabs[0].items.iter().any(|i| matches!(i, Item::OpPanel { op, .. } if op == "object.rename")));
         assert!(matches!(obj.tabs[1].items[0], Item::ObjectProps(id) if id == cube));
-        assert!(obj.tools.iter().any(|t| t.icon == Icon::EditMode && t.tint == Tint::Mode { edit: true }));
+        assert_eq!(obj.subject, Some(cube), "the mode bar speaks for the object under the pointer");
+        assert!(obj.tools.iter().all(|t| t.icon != Icon::EditMode), "mode lives in the bar, not the strip");
 
         let mesh_id = doc.objects.get(cube).unwrap().data;
         let el = ContextMenu::build(MenuContext::Element { mesh: mesh_id, kind: SelectMode::Face }, &doc, &exec, Vec2::ZERO, ViewFlags::default());
         assert!(el.title.starts_with("Face"));
-        assert_eq!(el.tools[2].icon, Icon::Vertex, "select modes follow the mode buttons");
-        assert!(el.tools[2].active, "vertex mode is the scene default");
+        assert_eq!(el.subject, Some(cube), "the mesh's owner");
+        assert_eq!(el.tools[0].icon, Icon::Vertex, "select modes lead the strip in edit mode");
+        assert!(el.tools[0].active, "vertex mode is the scene default");
         assert!(!el.tabs[0].items.iter().any(|i| matches!(i, Item::OpPanel { .. })), "knobs live in the Properties editor");
         for op in ["mesh.extrude", "mesh.subdivide", "mesh.merge_by_distance"] {
             assert!(el.tabs[0].items.iter().any(|i| matches!(i, Item::Action { op: o, .. } if o == op)), "{op} is a plain action");

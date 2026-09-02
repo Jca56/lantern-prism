@@ -2,6 +2,8 @@
 //! right inside a row), hit-tests them against this frame's input, and draws
 //! into the shared `DrawList`.
 
+use std::time::Duration;
+
 use prism_math::{Color, Rect, Vec2};
 use prism_render::DrawList;
 use prism_text::{GlyphQuad, TextEngine, TextMetrics, TextStyle};
@@ -12,6 +14,11 @@ use crate::theme::{Metrics, Theme};
 
 /// Pass as a width to take all available room.
 pub const FILL: f64 = f64::INFINITY;
+
+/// How long the pointer rests on a control before its tooltip shows.
+const TOOLTIP_DELAY: Duration = Duration::from_millis(350);
+/// Tooltips draw above popups.
+const TOOLTIP_LAYER: usize = 3;
 
 /// What kinds of input a widget reacts to.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -276,6 +283,7 @@ impl<'a> Ui<'a> {
         let hovered = over && (st.active.is_none() || st.active == Some(id));
         if hovered {
             st.hot = Some(id);
+            st.note_hover(id);
         }
         let mut r = Response { id, rect, hovered, ..Response::default() };
         let wants = sense.click || sense.drag || sense.focus;
@@ -307,10 +315,51 @@ impl<'a> Ui<'a> {
         if r.hovered && !r.held { self.theme.hover(self.theme.widget) } else { self.theme.widget }
     }
 
-    /// Draw a button face for `r` over `rect`.
+    /// Draw a button face for `r` over `rect`, glowing while hovered.
     pub fn button_face(&mut self, rect: Rect, r: &Response) {
+        if r.hovered && !r.held {
+            self.hover_glow(rect, self.theme.accent);
+        }
         let base = self.widget_color(r);
         self.raised(rect, base, r.held);
+    }
+
+    /// A soft halo in `color` around a hovered control. Draw it before the
+    /// face so the face sits on top.
+    pub fn hover_glow(&mut self, rect: Rect, color: Color) {
+        self.draw.shadow(rect.expand(self.m.px(1.0)), self.m.radius, self.m.px(10.0), color.fade(0.45));
+    }
+
+    /// Show `text` under the control `r` once the pointer has rested on it a
+    /// moment. Before that, asks the app to come back when the moment is up.
+    pub fn tooltip(&mut self, r: &Response, text: &str) {
+        if text.is_empty() || !r.hovered || r.held || self.state.active.is_some() {
+            return;
+        }
+        let Some(age) = self.state.hover_age(r.id) else {
+            return;
+        };
+        if age < TOOLTIP_DELAY {
+            self.state.wake_in = Some(TOOLTIP_DELAY - age);
+            return;
+        }
+        let style = self.text_style();
+        let (pad, gap) = (self.m.pad, self.m.gap);
+        let size = Vec2::new(self.measure(text, &style) + pad * 2.0, self.m.widget_h);
+        let win = self.window;
+        let x = r.rect.min.x.min(win.max.x - size.x - gap).max(win.min.x + gap);
+        let below = r.rect.max.y + gap;
+        let y = if below + size.y > win.max.y { r.rect.min.y - gap - size.y } else { below };
+        let rect = Rect::from_min_size(Vec2::new(x, y), size);
+        let (saved_layer, saved_clip) = (self.draw.layer(), self.clip);
+        self.draw.set_layer(TOOLTIP_LAYER);
+        self.draw.push_clip_absolute(win);
+        self.clip = win;
+        self.floating_panel(rect, self.theme.header);
+        self.text_centered(text, &style, rect, self.theme.text);
+        self.clip = saved_clip;
+        self.draw.pop_clip();
+        self.draw.set_layer(saved_layer);
     }
 
     // ---- text -----------------------------------------------------------

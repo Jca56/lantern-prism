@@ -67,23 +67,26 @@ impl Ui<'_> {
     }
 
     /// Square icon button the height of a widget; `active` lights it in the
-    /// accent.
-    pub fn icon_button(&mut self, label: &str, icon: Icon, active: bool) -> Response {
+    /// accent. `tip` is its tooltip.
+    pub fn icon_button(&mut self, label: &str, icon: Icon, active: bool, tip: &str) -> Response {
         let id = self.id(label);
         let rect = self.alloc(Vec2::splat(self.m.widget_h));
         let lit = active.then_some((self.theme.accent, self.theme.accent_text));
-        self.icon_button_in(id, rect, icon, lit)
+        self.icon_button_in(id, rect, icon, lit, tip)
     }
 
     /// An icon button over a rect placed by the caller. `lit` is the
     /// (face, ink) pair of an active button; `None` draws it as a plain button.
-    pub fn icon_button_in(&mut self, id: WidgetId, rect: Rect, icon: Icon, lit: Option<(Color, Color)>) -> Response {
+    pub fn icon_button_in(&mut self, id: WidgetId, rect: Rect, icon: Icon, lit: Option<(Color, Color)>, tip: &str) -> Response {
         let r = self.interact(id, rect, Sense::CLICK);
         if r.hovered {
             self.state.cursor_icon = CursorIcon::Pointer;
         }
         let ink = match lit {
             Some((face, ink)) => {
+                if r.hovered && !r.held {
+                    self.hover_glow(rect, face);
+                }
                 self.raised(rect, face, r.held);
                 ink
             }
@@ -93,6 +96,7 @@ impl Ui<'_> {
             }
         };
         icons::draw(self.draw, rect, icon, ink, self.m.px(2.0));
+        self.tooltip(&r, tip);
         r
     }
 
@@ -115,6 +119,9 @@ impl Ui<'_> {
             Vec2::splat(box_size),
         );
         let well = if r.hovered { self.theme.hover(self.theme.field) } else { self.theme.field };
+        if r.hovered {
+            self.hover_glow(bx, self.theme.accent);
+        }
         self.recessed(bx, well);
         if *value {
             let inner = bx.shrink(self.m.px(4.0));
@@ -181,6 +188,9 @@ impl Ui<'_> {
                 self.state.cursor_icon = CursorIcon::Pointer;
             }
             if *selected == i {
+                if r.hovered {
+                    self.hover_glow(tr, self.theme.accent);
+                }
                 self.raised(tr, self.theme.accent, false);
                 self.text_centered(label, &style, tr, self.theme.accent_text);
             } else {

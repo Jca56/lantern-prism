@@ -73,6 +73,9 @@ impl Ui<'_> {
         }
         let open_now = *self.state.open(id);
         let base = self.widget_color(&r);
+        if r.hovered && !r.held {
+            self.hover_glow(rect, self.theme.accent);
+        }
         self.raised(rect, base, open_now || r.held);
         self.text_centered(label, &style, rect, self.theme.text);
         if r.clicked {

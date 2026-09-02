@@ -92,7 +92,12 @@ pub struct UiState {
     /// Set by widgets that want another rebuild right after this one
     /// (e.g. a popup that just closed and needs the underlying UI to redraw).
     pub request_rebuild: bool,
+    /// Ask the app to redraw after this long even without input (a tooltip
+    /// waiting to appear).
+    pub wake_in: Option<Duration>,
     last_click: Option<(Instant, Vec2)>,
+    /// The widget under the pointer and when it got there, for tooltips.
+    hover_since: Option<(WidgetId, Instant)>,
     mem: HashMap<WidgetId, Mem>,
 }
 
@@ -136,7 +141,9 @@ impl UiState {
             popup_seen: false,
             cursor_icon: CursorIcon::Default,
             request_rebuild: false,
+            wake_in: None,
             last_click: None,
+            hover_since: None,
             mem: HashMap::new(),
         }
     }
@@ -156,6 +163,7 @@ impl UiState {
         self.hot = None;
         self.cursor_icon = CursorIcon::Default;
         self.request_rebuild = false;
+        self.wake_in = None;
         self.popup_seen = false;
         let start = self.pointer;
         for ev in events {
@@ -215,6 +223,22 @@ impl UiState {
         if !self.popup_seen {
             self.popup = None;
         }
+        if self.hot != self.hover_since.map(|(id, _)| id) {
+            self.hover_since = None;
+        }
+    }
+
+    /// A widget is under the pointer this frame; start its hover clock if it
+    /// was not already running.
+    pub fn note_hover(&mut self, id: WidgetId) {
+        if self.hover_since.is_none_or(|(h, _)| h != id) {
+            self.hover_since = Some((id, Instant::now()));
+        }
+    }
+
+    /// How long the pointer has rested on `id`, if it is there now.
+    pub fn hover_age(&self, id: WidgetId) -> Option<Duration> {
+        self.hover_since.filter(|(h, _)| *h == id).map(|(_, t)| t.elapsed())
     }
 
     /// Called by a popup while it is open so it survives the frame.
