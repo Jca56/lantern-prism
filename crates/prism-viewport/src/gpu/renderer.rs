@@ -94,6 +94,8 @@ pub struct Renderer {
     objects: Slots,
     pub meshes: MeshCache,
     pick: Option<PickTarget>,
+    /// Empty flag buffers so the grid can draw with no objects in the scene.
+    dummy_flags: wgpu::BindGroup,
 }
 
 fn c4(c: Color) -> [f32; 4] {
@@ -144,7 +146,22 @@ impl Renderer {
         let pipes = Pipelines::new(gpu, color_format);
         let views = Slots::new(gpu, &pipes.view_layout, VIEW_STRIDE, 8, "prism view slots", size_of::<ViewUniforms>() as u64);
         let objects = Slots::new(gpu, &pipes.object_layout, OBJECT_STRIDE, 64, "prism object slots", size_of::<ObjectUniforms>() as u64);
-        Self { pipes, views, objects, meshes: MeshCache::new(), pick: None }
+        let zero = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("prism empty flags"),
+            size: 16,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+        let dummy_flags = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("prism empty flags"),
+            layout: &pipes.flags_layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: zero.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: zero.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: zero.as_entire_binding() },
+            ],
+        });
+        Self { pipes, views, objects, meshes: MeshCache::new(), pick: None, dummy_flags }
     }
 
     /// Write uniforms and sync buffers for every viewport of this frame.
@@ -214,12 +231,9 @@ impl Renderer {
             pass.set_scissor_rect(x, y, w, h);
             pass.set_bind_group(0, &self.views.bind_group, &[vp.view_offset]);
             // Grid first: it also paints the background and initial depth.
-            if let Some(first) = vp.objects.first()
-                && let Some(g) = self.meshes.get(first.mesh)
-            {
-                pass.set_bind_group(1, &self.objects.bind_group, &[first.object_offset]);
-                pass.set_bind_group(2, &g.flags_bind_group, &[]);
-            }
+            // It ignores groups 1 and 2 but the shared layout wants them bound.
+            pass.set_bind_group(1, &self.objects.bind_group, &[0]);
+            pass.set_bind_group(2, &self.dummy_flags, &[]);
             let _ = vp.grid;
             pass.set_pipeline(&self.pipes.grid);
             pass.draw(0..3, 0..1);
