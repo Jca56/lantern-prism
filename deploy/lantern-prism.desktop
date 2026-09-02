@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Prism
+GenericName=3D Mesh Editor
+Comment=Model meshes: extrude, inset, loop cut, mirror and subdivision
+Exec=lantern-prism
+Icon=/home/alva/.lantern/icons/lantern-prism.svg
+Terminal=false
+Categories=Graphics;3DGraphics;
+StartupWMClass=lantern-prism

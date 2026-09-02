@@ -44,6 +44,9 @@ pub(crate) fn selected_cube() -> (Doc, Executor, Id) {
     let mut ex = Executor::with_builtins();
     let cube = doc.scene_objects()[0];
     ex.run_with("object.select", &[("id", Value::Id(cube))], &mut Ctx::new(&mut doc)).unwrap();
+    // The starter cube rests on the floor; these tests want it at the origin
+    // so the top-down view's pixel arithmetic stays simple.
+    doc.objects.get_mut(cube).unwrap().location = Vec3::ZERO;
     (doc, ex, cube)
 }
 

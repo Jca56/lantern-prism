@@ -73,9 +73,11 @@ impl Doc {
             o.rotation = prism_math::Vec3::new(-0.45, 0.785, 0.0);
         }
         // The cube starts selected and active, so Tab, the gizmo and the
-        // Edit button work from the first frame.
+        // Edit button work from the first frame; it rests on the floor
+        // rather than straddling it (Alva, 2026-09-02).
         if let Some(o) = doc.objects.get_mut(cube) {
             o.selected = true;
+            o.location = prism_math::Vec3::new(0.0, 1.0, 0.0);
         }
         let scene_id = doc.active_scene;
         if let Some(s) = doc.scenes.get_mut(scene_id) {
@@ -304,10 +306,11 @@ mod tests {
         let mut b = a.clone();
         assert!(a.objects.ptr_eq(&b.objects));
         let cube = b.scene_objects()[0];
+        let start = a.objects.get(cube).unwrap().location;
         b.objects.get_mut(cube).unwrap().location = Vec3::X;
         assert!(!a.objects.ptr_eq(&b.objects));
         assert!(a.meshes.ptr_eq(&b.meshes), "meshes untouched");
-        assert_eq!(a.objects.get(cube).unwrap().location, Vec3::ZERO);
+        assert_eq!(a.objects.get(cube).unwrap().location, start, "the original is untouched");
         assert_eq!(b.objects.get(cube).unwrap().location, Vec3::X);
     }
 

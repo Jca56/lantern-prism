@@ -22,6 +22,10 @@ use winit::window::{Window, WindowId};
 /// caps how many happen back to back before we present.
 const MAX_REBUILDS: usize = 4;
 
+/// Wayland app id / X11 class: the name of the binary and desktop entry in
+/// `deploy/`, so the compositor can find the icon.
+const APP_ID: &str = "lantern-prism";
+
 struct Gfx {
     window: Arc<Window>,
     gpu: Gpu,
@@ -73,10 +77,14 @@ impl App {
     }
 
     fn init_gfx(&mut self, event_loop: &ActiveEventLoop) {
-        let attrs = Window::default_attributes()
-            .with_title("Prism")
-            .with_decorations(false)
-            .with_inner_size(LogicalSize::new(1600.0, 1000.0));
+        let attrs = Window::default_attributes().with_title("Prism").with_decorations(false).with_inner_size(LogicalSize::new(1600.0, 1000.0));
+        // The app id pairs the window with `deploy/lantern-prism.desktop` and
+        // its icon under Wayland; the X11 class does the same job there.
+        #[cfg(target_os = "linux")]
+        let attrs = {
+            let attrs = winit::platform::wayland::WindowAttributesExtWayland::with_name(attrs, APP_ID, APP_ID);
+            winit::platform::x11::WindowAttributesExtX11::with_name(attrs, APP_ID, APP_ID)
+        };
         let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
         self.scale = window.scale_factor();
         let size = window.inner_size();
