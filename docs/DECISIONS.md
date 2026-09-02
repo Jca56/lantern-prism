@@ -361,6 +361,23 @@ select are Phase 6's next slices on top of this engine.
 **Why:** One engine under gizmo drags, menu actions and extrude, so undo,
 cancel and adjust-last come from the executor for free.
 
+## D025 — Box select reads the pick buffer; the result is a direct edit
+**Status:** Accepted (implemented 2026-09-02)
+**Decision:** A left drag on a viewport body past the click slop draws a
+rectangle; on release the same ID pass as a click renders the viewport and
+the whole rectangle is read back, so the selection is exactly the objects or
+elements with a **visible** pixel inside it (occlusion-aware, like Blender
+without X-ray). Shift extends, Ctrl subtracts, neither replaces. Because a
+set of hits has no natural operator props, the shell writes the selection
+through `select::select_objects` / `select_elems` in `prism-ops` and records
+one `ui.edit` step labelled "Box Select" (D021 rule 3). The pick pass draws
+only the wanted finer element on top of the faces (a vertex dot is ~15 px),
+and object pick ids index the *drawn* list, so a light or camera ahead of a
+mesh in the scene no longer breaks clicking it.
+**Why:** One ID pass serves click, right-click and box; readback of a region
+is the same copy with a wider row pitch. Select-through in wireframe (X-ray)
+is a later toggle on the same path.
+
 ---
 
 ## Open questions

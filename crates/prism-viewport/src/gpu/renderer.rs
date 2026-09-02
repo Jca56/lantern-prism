@@ -1,21 +1,22 @@
-//! Records viewport passes and performs picks. Two phases per frame:
+//! Records viewport passes (picking lives in `pick.rs`). Two phases per frame:
 //! [`Renderer::prepare`] writes every uniform and syncs mesh buffers, then
 //! [`Renderer::record`] only reads what was prepared while recording.
 
 use prism_core::{Id, bytes};
 use prism_doc::{DataKind, Doc, ObjectMode};
-use prism_math::{Color, Mat4, Rect, Vec2, Vec3};
+use prism_math::{Color, Mat4, Rect, Vec3};
 use prism_render::Gpu;
 
 use super::mesh_cache::MeshCache;
-use super::pipelines::{DEPTH_FORMAT, PICK_FORMAT, Pipelines};
+use super::pick::PickTarget;
+use super::pipelines::Pipelines;
 use super::uniforms::{OBJECT_STRIDE, ObjectUniforms, VIEW_STRIDE, ViewUniforms};
 use crate::camera::Camera;
-use crate::request::{PickMode, PickRequest, PickResult, Shading, ViewColors, ViewportRequest};
+use crate::request::{Shading, ViewColors, ViewportRequest};
 
-struct Slots {
+pub(super) struct Slots {
     buffer: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
+    pub(super) bind_group: wgpu::BindGroup,
     stride: u64,
     capacity: u32,
     used: u32,
@@ -40,14 +41,14 @@ impl Slots {
         Self { buffer, bind_group, stride, capacity, used: 0 }
     }
 
-    fn ensure(&mut self, gpu: &Gpu, layout: &wgpu::BindGroupLayout, needed: u32, label: &str, binding_size: u64) {
+    pub(super) fn ensure(&mut self, gpu: &Gpu, layout: &wgpu::BindGroupLayout, needed: u32, label: &str, binding_size: u64) {
         if needed > self.capacity {
             *self = Self::new(gpu, layout, self.stride, needed.next_power_of_two(), label, binding_size);
         }
         self.used = 0;
     }
 
-    fn push<T: bytes::Pod>(&mut self, gpu: &Gpu, value: &T) -> u32 {
+    pub(super) fn push<T: bytes::Pod>(&mut self, gpu: &Gpu, value: &T) -> u32 {
         let offset = self.used as u64 * self.stride;
         gpu.queue.write_buffer(&self.buffer, offset, bytes::bytes_of(value));
         self.used += 1;
@@ -78,22 +79,12 @@ pub struct PreparedFrame {
     pub drawn: Vec<Vec<Id>>,
 }
 
-struct PickTarget {
-    size: [u32; 2],
-    view: wgpu::TextureView,
-    depth_view: wgpu::TextureView,
-    texture: wgpu::Texture,
-    staging: wgpu::Buffer,
-}
-
-const PICK_WINDOW: u32 = 64;
-
 pub struct Renderer {
-    pipes: Pipelines,
-    views: Slots,
-    objects: Slots,
+    pub(super) pipes: Pipelines,
+    pub(super) views: Slots,
+    pub(super) objects: Slots,
     pub meshes: MeshCache,
-    pick: Option<PickTarget>,
+    pub(super) pick: Option<PickTarget>,
     /// Empty flag buffers so the grid can draw with no objects in the scene.
     dummy_flags: wgpu::BindGroup,
 }
@@ -102,7 +93,7 @@ fn c4(c: Color) -> [f32; 4] {
     c.to_linear().to_gpu()
 }
 
-fn view_uniforms(camera: &Camera, rect: Rect, size: [f32; 2], colors: &ViewColors) -> ViewUniforms {
+pub(super) fn view_uniforms(camera: &Camera, rect: Rect, size: [f32; 2], colors: &ViewColors) -> ViewUniforms {
     let aspect = rect.width() / rect.height().max(1.0);
     let cam_pos = camera.position();
     ViewUniforms {
@@ -119,7 +110,7 @@ fn view_uniforms(camera: &Camera, rect: Rect, size: [f32; 2], colors: &ViewColor
     }
 }
 
-fn object_uniforms(doc: &Doc, id: Id, cam_pos: Vec3, colors: &ViewColors, pick_id: u32, element_pick: bool) -> Option<(ObjectUniforms, Id, bool)> {
+pub(super) fn object_uniforms(doc: &Doc, id: Id, cam_pos: Vec3, colors: &ViewColors, pick_id: u32, element_pick: bool) -> Option<(ObjectUniforms, Id, bool)> {
     let obj = doc.objects.get(id)?;
     if obj.kind != DataKind::Mesh || !obj.visible {
         return None;
@@ -261,199 +252,6 @@ impl Renderer {
                     pass.set_pipeline(&self.pipes.points);
                     pass.set_vertex_buffer(0, g.vert_pos.slice(..));
                     pass.draw(0..6, 0..g.vert_count);
-                }
-            }
-        }
-    }
-
-    fn ensure_pick_target(&mut self, gpu: &Gpu, size: [u32; 2]) {
-        if self.pick.as_ref().is_none_or(|p| p.size != size) {
-            let tex = |format, usage| {
-                gpu.device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("prism pick"),
-                    size: wgpu::Extent3d { width: size[0], height: size[1], depth_or_array_layers: 1 },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage,
-                    view_formats: &[],
-                })
-            };
-            let texture = tex(PICK_FORMAT, wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC);
-            let depth = tex(DEPTH_FORMAT, wgpu::TextureUsages::RENDER_ATTACHMENT);
-            let staging = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("prism pick readback"),
-                size: (PICK_WINDOW * PICK_WINDOW * 4) as u64,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                mapped_at_creation: false,
-            });
-            self.pick = Some(PickTarget {
-                size,
-                view: texture.create_view(&Default::default()),
-                depth_view: depth.create_view(&Default::default()),
-                texture,
-                staging,
-            });
-        }
-    }
-
-    /// Render ids for one viewport and read back a window around the cursor.
-    /// Synchronous: waits for the GPU. Only runs on a click. Needs no
-    /// swapchain frame: it draws into its own target.
-    pub fn pick(&mut self, gpu: &Gpu, doc: &Doc, req: &PickRequest) -> PickResult {
-        let size = [req.rect.width().max(1.0) as u32, req.rect.height().max(1.0) as u32];
-        let local = req.pos - req.rect.min;
-        if local.x < 0.0 || local.y < 0.0 || local.x >= size[0] as f64 || local.y >= size[1] as f64 {
-            return PickResult::Nothing;
-        }
-        let scene_objects = doc.scene_objects();
-        self.views.ensure(gpu, &self.pipes.view_layout, 1, "prism view slots", size_of::<ViewUniforms>() as u64);
-        self.objects.ensure(gpu, &self.pipes.object_layout, scene_objects.len().max(1) as u32, "prism object slots", size_of::<ObjectUniforms>() as u64);
-        let element_mode = req.mode != PickMode::Object;
-        let local_rect = Rect::from_min_size(Vec2::ZERO, Vec2::new(size[0] as f64, size[1] as f64));
-        let view_offset = self.views.push(gpu, &view_uniforms(&req.camera, local_rect, [size[0] as f32, size[1] as f32], &req.colors));
-        let cam_pos = req.camera.position();
-
-        let mut draws: Vec<(Id, u32, bool)> = Vec::new();
-        let mut ids: Vec<Id> = Vec::new();
-        for (i, &id) in scene_objects.iter().enumerate() {
-            let Some((u, mesh_id, edit)) = object_uniforms(doc, id, cam_pos, &req.colors, i as u32 + 1, element_mode) else {
-                continue;
-            };
-            if element_mode && !edit {
-                continue;
-            }
-            if let Some(block) = doc.meshes.get(mesh_id) {
-                self.meshes.sync(gpu, &self.pipes.flags_layout, mesh_id, block);
-            }
-            let off = self.objects.push(gpu, &u);
-            draws.push((mesh_id, off, edit));
-            ids.push(id);
-        }
-
-        self.ensure_pick_target(gpu, size);
-        let target = self.pick.as_ref().expect("created");
-        let mut encoder = gpu.create_encoder("prism pick");
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("prism pick pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &target.view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &target.depth_view,
-                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(0.0), store: wgpu::StoreOp::Store }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
-            pass.set_bind_group(0, &self.views.bind_group, &[view_offset]);
-            for &(mesh_id, off, _) in &draws {
-                let Some(g) = self.meshes.get(mesh_id) else {
-                    continue;
-                };
-                pass.set_bind_group(1, &self.objects.bind_group, &[off]);
-                pass.set_bind_group(2, &g.flags_bind_group, &[]);
-                if g.tri_index_count > 0 {
-                    pass.set_pipeline(&self.pipes.pick_faces);
-                    pass.set_vertex_buffer(0, g.corner_pos.slice(..));
-                    pass.set_vertex_buffer(1, g.corner_normal.slice(..));
-                    pass.set_vertex_buffer(2, g.corner_face.slice(..));
-                    pass.set_index_buffer(g.tri_index.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..g.tri_index_count, 0, 0..1);
-                }
-                // Faces always draw (they occlude); only the wanted kind of
-                // finer element goes on top. Drawing the others too would
-                // stamp their ids over the faces (a vertex dot is ~15 px) and
-                // a face click near a corner would find nothing.
-                if req.mode == PickMode::Edge && g.edge_vertex_count > 0 {
-                    pass.set_pipeline(&self.pipes.pick_lines);
-                    pass.set_vertex_buffer(0, g.edge_pos.slice(..));
-                    pass.draw(0..g.edge_vertex_count, 0..1);
-                }
-                if req.mode == PickMode::Vertex && g.vert_count > 0 {
-                    pass.set_pipeline(&self.pipes.pick_points);
-                    pass.set_vertex_buffer(0, g.vert_pos.slice(..));
-                    pass.draw(0..6, 0..g.vert_count);
-                }
-            }
-        }
-        // Copy a window around the cursor.
-        let half = (PICK_WINDOW / 2) as i64;
-        let cx = local.x as i64;
-        let cy = local.y as i64;
-        let x0 = (cx - half).clamp(0, size[0] as i64 - 1) as u32;
-        let y0 = (cy - half).clamp(0, size[1] as i64 - 1) as u32;
-        let w = PICK_WINDOW.min(size[0] - x0);
-        let h = PICK_WINDOW.min(size[1] - y0);
-        encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo { texture: &target.texture, mip_level: 0, origin: wgpu::Origin3d { x: x0, y: y0, z: 0 }, aspect: wgpu::TextureAspect::All },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &target.staging,
-                layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(PICK_WINDOW * 4), rows_per_image: None },
-            },
-            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-        );
-        gpu.queue.submit([encoder.finish()]);
-        let slice = target.staging.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        let _ = gpu.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None });
-        if rx.recv().ok().and_then(Result::ok).is_none() {
-            return PickResult::Nothing;
-        }
-        let ids_px: Vec<u32> = {
-            let data = slice.get_mapped_range();
-            bytes::vec_from_bytes(&data)
-        };
-        target.staging.unmap();
-
-        // Search the window for the best candidate of the wanted kind.
-        let wanted_kind: u32 = match req.mode {
-            PickMode::Object => 0,
-            PickMode::Face => 1,
-            PickMode::Edge => 2,
-            PickMode::Vertex => 3,
-        };
-        let radius = if req.mode == PickMode::Face || req.mode == PickMode::Object { 2.0 } else { req.radius };
-        let mut best: Option<(f64, u32)> = None;
-        for py in 0..h {
-            for px in 0..w {
-                let id = ids_px[(py * PICK_WINDOW + px) as usize];
-                if id == 0 || (id >> 30) != wanted_kind {
-                    continue;
-                }
-                let dx = (x0 + px) as f64 + 0.5 - local.x;
-                let dy = (y0 + py) as f64 + 0.5 - local.y;
-                let d = (dx * dx + dy * dy).sqrt();
-                if d <= radius && best.is_none_or(|(bd, _)| d < bd) {
-                    best = Some((d, id & 0x3fff_ffff));
-                }
-            }
-        }
-        let Some((_, index)) = best else {
-            return PickResult::Nothing;
-        };
-        match req.mode {
-            PickMode::Object => ids.get(index as usize - 1).map_or(PickResult::Nothing, |&id| PickResult::Object(id)),
-            _ => {
-                let Some(&(mesh_id, _, _)) = draws.first() else {
-                    return PickResult::Nothing;
-                };
-                let Some(g) = self.meshes.get(mesh_id) else {
-                    return PickResult::Nothing;
-                };
-                let i = index as usize - 1;
-                match req.mode {
-                    PickMode::Vertex => g.buffers.vert_to_vert.get(i).map_or(PickResult::Nothing, |&v| PickResult::Vert(mesh_id, v)),
-                    PickMode::Edge => g.buffers.edge_to_edge.get(i).map_or(PickResult::Nothing, |&e| PickResult::Edge(mesh_id, e)),
-                    _ => g.buffers.face_handles.get(i).map_or(PickResult::Nothing, |&f| PickResult::Face(mesh_id, f)),
                 }
             }
         }

@@ -2,13 +2,14 @@
 //! feeding a running modal operator, acting on operator requests, and turning
 //! resolved picks into selection or a context menu (D024).
 
-use prism_doc::Doc;
+use prism_doc::{Doc, Elem, SelectMode};
+use prism_ops::builtin::select;
 use prism_ops::{Ctx, Executor, Flow, UiRequest, ViewInfo};
 use prism_props::Value;
-use prism_viewport::{GizmoMode, PickPurpose, PickRequest, PickResult, Shading, ViewportState};
+use prism_viewport::{GizmoMode, PickMode, PickPurpose, PickRequest, PickResult, PickSet, Shading, ViewportState};
 
 use crate::context_menu::{ContextMenu, ViewFlags};
-use crate::editors::{EditorKind, run_op, viewport};
+use crate::editors::{EditorKind, record_edit, run_op, viewport};
 use crate::event::Event;
 use crate::popups::Popup;
 use crate::screen::AreaId;
@@ -149,6 +150,31 @@ impl Shell {
             PickResult::Face(_, f) => {
                 let _ = run_op(doc, exec, req.pos, view, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(2)), ("handle".to_owned(), Value::I64(f.to_raw() as i64))]), &mut requests);
             }
+        }
+        self.state.request_rebuild = true;
+    }
+
+    /// Apply a box select (D025). Selection is set directly and recorded as
+    /// one "Box Select" undo step (D021 rule 3), since the set of hits has
+    /// no natural operator props.
+    pub fn apply_box(&mut self, doc: &mut Doc, exec: &mut Executor, req: &PickRequest, set: PickSet) {
+        let before = doc.clone();
+        let (extend, subtract) = (req.extend, req.toggle);
+        let edit_mesh = doc.active_object().map(|o| o.data);
+        let elems = |block: &mut prism_doc::MeshBlock, mode: SelectMode, elems: &[Elem]| select::select_elems(block, mode, elems, extend, subtract);
+        let changed = match set {
+            PickSet::Objects(ids) => select::select_objects(doc, &ids, extend, subtract),
+            PickSet::Nothing if req.mode == PickMode::Object => select::select_objects(doc, &[], extend, subtract),
+            PickSet::Nothing => {
+                let mode = doc.scene().map_or(SelectMode::Vertex, |s| s.tool.select_mode);
+                edit_mesh.and_then(|m| doc.meshes.get_mut(m)).is_some_and(|b| elems(b, mode, &[]))
+            }
+            PickSet::Verts(m, vs) => doc.meshes.get_mut(m).is_some_and(|b| elems(b, SelectMode::Vertex, &vs.iter().copied().map(Elem::Vert).collect::<Vec<_>>())),
+            PickSet::Edges(m, es) => doc.meshes.get_mut(m).is_some_and(|b| elems(b, SelectMode::Edge, &es.iter().copied().map(Elem::Edge).collect::<Vec<_>>())),
+            PickSet::Faces(m, fs) => doc.meshes.get_mut(m).is_some_and(|b| elems(b, SelectMode::Face, &fs.iter().copied().map(Elem::Face).collect::<Vec<_>>())),
+        };
+        if changed {
+            record_edit(exec, doc, before, "Box Select", false);
         }
         self.state.request_rebuild = true;
     }

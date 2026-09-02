@@ -3,5 +3,6 @@
 
 pub mod mesh_cache;
 pub mod pipelines;
+pub mod pick;
 pub mod renderer;
 pub mod uniforms;

@@ -9,7 +9,7 @@ use prism_ops::Executor;
 use prism_math::{Rect, Vec2};
 use prism_render::wgpu;
 use prism_render::{DrawList, Gpu, Pass2d, RenderGraph, SurfaceTarget, TexDesc, TexturePool, clear_pass};
-use prism_viewport::Renderer;
+use prism_viewport::{PickPurpose, Renderer};
 use prism_text::TextEngine;
 use prism_ui::{CursorIcon, Event, Modifiers, ResizeEdge, Shell, WindowCommand, WindowState};
 use winit::application::ApplicationHandler;
@@ -128,8 +128,13 @@ impl App {
             // cannot swallow a click.
             if !o.picks.is_empty() {
                 for pick in o.picks.drain(..) {
-                    let result = gfx.renderer.pick(&gfx.gpu, &self.doc, &pick);
-                    self.shell.apply_pick(&mut self.doc, &mut self.exec, &pick, result);
+                    if pick.purpose == PickPurpose::Box {
+                        let set = gfx.renderer.pick_box(&gfx.gpu, &self.doc, &pick);
+                        self.shell.apply_box(&mut self.doc, &mut self.exec, &pick, set);
+                    } else {
+                        let result = gfx.renderer.pick(&gfx.gpu, &self.doc, &pick);
+                        self.shell.apply_pick(&mut self.doc, &mut self.exec, &pick, result);
+                    }
                 }
                 again = true;
             }

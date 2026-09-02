@@ -131,6 +131,7 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
             radius: ui.m.px(14.0),
             extend: false,
             toggle: false,
+            region: Rect::ZERO,
             colors,
         });
     }
@@ -147,6 +148,31 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
             radius: ui.m.px(14.0),
             extend: st.mods.shift(),
             toggle: st.mods.ctrl(),
+            region: Rect::ZERO,
+            colors,
+        });
+    }
+
+    // ---- box select: a left drag on the body (D025) ---------------------------
+    let dragged = (st.pointer - st.press_pos).length() > ui.m.px(CLICK_SLOP);
+    let region = Rect::new(st.press_pos.min(st.pointer), st.press_pos.max(st.pointer)).intersection(&rect);
+    if r.held && !alt && dragged {
+        let c = ui.theme.selection;
+        ui.draw.rect(region, c.fade(0.18));
+        ui.draw.stroke_rect(region, ui.m.px(2.0), 0.0, c);
+    }
+    if r.released && !alt && dragged && !region.is_empty() {
+        ctx.picks.push(PickRequest {
+            purpose: prism_viewport::PickPurpose::Box,
+            area: ctx.area,
+            rect,
+            camera: vp.camera,
+            pos: st.pointer,
+            mode,
+            radius: 0.0,
+            extend: st.mods.shift(),
+            toggle: st.mods.ctrl(),
+            region,
             colors,
         });
     }

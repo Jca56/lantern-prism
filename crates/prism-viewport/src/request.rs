@@ -165,6 +165,8 @@ pub enum PickPurpose {
     Select,
     /// Right click: open the context menu for what was hit.
     ContextMenu,
+    /// Drag: everything of the wanted kind visible inside `region`.
+    Box,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -179,7 +181,10 @@ pub struct PickRequest {
     /// Search radius in pixels for vertices and edges.
     pub radius: f64,
     pub extend: bool,
+    /// Click: toggle the hit. Box: subtract what the box covers.
     pub toggle: bool,
+    /// Window-space rectangle for `PickPurpose::Box`; unused otherwise.
+    pub region: Rect,
     pub colors: ViewColors,
 }
 
@@ -190,4 +195,15 @@ pub enum PickResult {
     Vert(Id, VertH),
     Edge(Id, EdgeH),
     Face(Id, FaceH),
+}
+
+/// What a box select found: objects, or elements of the edit mesh.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub enum PickSet {
+    #[default]
+    Nothing,
+    Objects(Vec<Id>),
+    Verts(Id, Vec<VertH>),
+    Edges(Id, Vec<EdgeH>),
+    Faces(Id, Vec<FaceH>),
 }
