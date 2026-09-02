@@ -1,0 +1,13 @@
+[package]
+name = "prism-props"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+prism-math.workspace = true
+prism-core.workspace = true
