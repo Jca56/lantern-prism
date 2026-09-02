@@ -2,9 +2,10 @@
 //! Preferences editor edits it live. Sizes are logical pixels in multiples of
 //! five; [`Metrics`] is the theme scaled to physical pixels for one frame.
 //!
-//! The look: charcoal panels with a little vertical gradient, raised
-//! controls (light top edge, dark bottom edge), recessed fields, an amber
-//! accent for "on", blue for selection, and a color per object kind.
+//! The look: near-black panels with a little vertical gradient, raised
+//! controls (light top edge, dark bottom edge), recessed fields, a bright
+//! amber accent for "on", blue for selection, and a saturated color per
+//! object kind so they carry against the dark ground.
 //! `gradient` is the depth knob; zero is flat.
 
 use prism_math::Color;
@@ -14,37 +15,37 @@ props! {
     /// Colors and sizes of the editor UI.
     pub struct Theme {
         /// Window background, title bar, gaps between areas.
-        pub bg: Color = Color::hex(0x19191B) => { id: 1 },
+        pub bg: Color = Color::hex(0x0F0F11) => { id: 1 },
         /// Area header bars (shaded by `gradient`).
-        pub header: Color = Color::hex(0x38383B) => { id: 2 },
+        pub header: Color = Color::hex(0x2B2B2F) => { id: 2 },
         /// Area bodies.
-        pub panel: Color = Color::hex(0x27272A) => { id: 3 },
+        pub panel: Color = Color::hex(0x1B1B1E) => { id: 3 },
         /// Raised controls: buttons, tabs, thumbs.
-        pub widget: Color = Color::hex(0x47474B) => { id: 4 },
+        pub widget: Color = Color::hex(0x37373C) => { id: 4 },
         /// Recessed controls: fields, sliders tracks, the viewport well.
-        pub field: Color = Color::hex(0x1D1D1F) => { id: 5 },
-        pub text: Color = Color::hex(0xEDEDED) => { id: 6 },
-        pub text_dim: Color = Color::hex(0x9A9A9F) => { id: 7 },
+        pub field: Color = Color::hex(0x131315) => { id: 5 },
+        pub text: Color = Color::hex(0xF2F2F4) => { id: 6 },
+        pub text_dim: Color = Color::hex(0xA0A0A8) => { id: 7 },
         /// "On": active tabs, checked toggles, slider fill.
-        pub accent: Color = Color::hex(0xE3A72F) => { id: 8 },
+        pub accent: Color = Color::hex(0xFFB733) => { id: 8 },
         /// Text on top of `accent`.
         pub accent_text: Color = Color::hex(0x1A1508) => { id: 9 },
         /// Selected rows and items.
-        pub selection: Color = Color::hex(0x3E6EB4) => { id: 10 },
+        pub selection: Color = Color::hex(0x4A82DC) => { id: 10 },
         pub selection_text: Color = Color::hex(0xFFFFFF) => { id: 11 },
         /// Outline of the focused area and focused field.
-        pub focus: Color = Color::hex(0x5B8FE3) => { id: 12 },
+        pub focus: Color = Color::hex(0x6EA6FF) => { id: 12 },
         /// The close button while hovered.
-        pub close: Color = Color::hex(0xC0392B) => { id: 13 },
+        pub close: Color = Color::hex(0xE0473A) => { id: 13 },
         /// Dark lines: panel edges, control outlines.
-        pub border_dark: Color = Color::hex(0x0F0F11) => { id: 14 },
+        pub border_dark: Color = Color::hex(0x060608) => { id: 14 },
         /// Light lines: bevels, etched separators.
-        pub border_light: Color = Color::hex(0x5C5C61) => { id: 15 },
+        pub border_light: Color = Color::hex(0x4E4E55) => { id: 15 },
         /// Object kind colors (outliner strips, later viewport tints).
-        pub mesh_color: Color = Color::hex(0xE58A2E) => { id: 16 },
-        pub light_color: Color = Color::hex(0xE8C547) => { id: 17 },
-        pub camera_color: Color = Color::hex(0x4C8BD6) => { id: 18 },
-        pub empty_color: Color = Color::hex(0x9A9A9F) => { id: 19 },
+        pub mesh_color: Color = Color::hex(0xFF9A3C) => { id: 16 },
+        pub light_color: Color = Color::hex(0xFFD84F) => { id: 17 },
+        pub camera_color: Color = Color::hex(0x5CA3F5) => { id: 18 },
+        pub empty_color: Color = Color::hex(0xA8A8B0) => { id: 19 },
         /// Strength of the vertical shading on headers and controls. 0 = flat.
         pub gradient: f64 = 0.12 => { id: 20, hard: 0.0..=0.4, subtype: Factor },
 

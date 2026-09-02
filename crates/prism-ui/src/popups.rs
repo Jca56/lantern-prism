@@ -1,6 +1,7 @@
 //! Shell-level popups: named menus, the command palette, the path dialog,
 //! and the right-click context menu. Drawn above everything; Escape or an
-//! outside press closes them.
+//! outside press closes them. Menus let that press fall through to whatever
+//! is underneath (one click dismisses *and* selects); dialogs swallow it.
 
 use prism_doc::Doc;
 use prism_math::{Rect, Vec2};
@@ -131,7 +132,9 @@ pub fn draw(
     ui.state.keep_popup(rect, layer);
     if ui.state.pressed && !rect.contains(ui.state.press_pos) {
         out.close = true;
-        ui.state.press_claimed = true;
+        if !matches!(popup, Popup::Menu { .. }) {
+            ui.state.press_claimed = true;
+        }
     }
 
     let saved_layer = ui.layer();
@@ -271,15 +274,21 @@ fn draw_context(ui: &mut Ui, menu: &mut ContextMenu, window: Rect, host: &mut Ho
     let panel = Rect::from_min_size(Vec2::new(x, y), Vec2::new(width, est_h));
     let strip = Rect::from_min_size(Vec2::new(panel.min.x - m.gap - strip_w, panel.min.y), Vec2::new(strip_w, strip_h.max(1.0)));
     let sub_w = m.px(300.0);
-    let sub_area = Rect::from_min_size(Vec2::new(panel.max.x + m.gap, panel.min.y), Vec2::new(sub_w, est_h));
+    // The submenu opens beside the panel, on the left when the right is full.
+    let sub_x = if panel.max.x + m.gap + sub_w <= window.max.x { panel.max.x + m.gap } else { strip.min.x - m.gap - sub_w };
+    let sub_area = Rect::from_min_size(Vec2::new(sub_x, panel.min.y), Vec2::new(sub_w, est_h));
     let mut hit = panel.union(&strip);
     if menu.open_sub.is_some() {
         hit = hit.union(&sub_area);
     }
     ui.state.keep_popup(hit, 1);
-    if ui.state.pressed && !hit.contains(ui.state.press_pos) {
+    // A press outside closes the menu but is left unclaimed, so the editor
+    // underneath still gets it: one click selects, one right-click opens the
+    // menu for the new thing.
+    let outside_left = ui.state.pressed && !hit.contains(ui.state.press_pos);
+    let outside_right = ui.state.right_pressed && !hit.contains(ui.state.pointer);
+    if outside_left || outside_right {
         out.close = true;
-        ui.state.press_claimed = true;
     }
 
     let saved_layer = ui.layer();
@@ -404,7 +413,6 @@ fn draw_context(ui: &mut Ui, menu: &mut ContextMenu, window: Rect, host: &mut Ho
     if let (Some(si), Some((_, anchor_y))) = (menu.open_sub, sub_anchor)
         && let Some(Item::Sub { items, .. }) = menu.tabs.get(tab).and_then(|t| t.items.get(si)).cloned()
     {
-        let sub_x = if panel_rect.max.x + m.gap + sub_w <= window.max.x { panel_rect.max.x + m.gap } else { strip.min.x - m.gap - sub_w };
         let sub_y = anchor_y.min(window.max.y - m.widget_h * (items.len() as f64 + 0.5) - m.pad * 2.0).max(window.min.y);
         let sub_rect = Rect::from_min_size(Vec2::new(sub_x, sub_y), Vec2::new(sub_w, m.widget_h * items.len() as f64 + m.gap * (items.len() as f64 - 1.0).max(0.0) + m.pad * 2.0));
         ui.set_cursor(sub_rect.min + Vec2::splat(m.pad));

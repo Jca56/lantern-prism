@@ -290,8 +290,10 @@ viewport bodies so the 3D shows through; everything the UI draws over a
 viewport (inner shadow, mode label, popups) lands on top naturally.
 Picking is a separate on-demand pass into an `R32Uint` target the size of
 the viewport: object ids in object mode, face/edge/vertex ids (kind in the
-top two bits) for the edit object, drawn in that order with depth bias so
-finer elements win. A 64×64 window around the cursor is read back
+top two bits) for the edit object. Faces always draw (they occlude); only
+the wanted finer kind draws on top with depth bias, since a vertex dot
+stamped over a face would leave face clicks near corners finding nothing.
+A 64×64 window around the cursor is read back
 **synchronously** (only on a click) and the nearest id of the wanted kind
 within the pick radius is chosen. Selection state reaches the GPU as packed
 one-byte-per-element flag buffers keyed by `Mesh::selection_version`, so a
@@ -307,14 +309,18 @@ pass (needs per-command texture binding, breaks the single UI draw).
 **Decision:** Right-click opens a menu built from what was under the pointer.
 In a viewport a pick runs first: nothing → Scene (Add / View / Select);
 an object → that object (actions, live transform panel); in edit mode an
-element → element menu (Extrude, Subdivide, Merge as live operator panels,
+element → element menu (Extrude, Subdivide, Merge by Distance as actions,
 Delete and Dissolve submenus, normals) and empty space → the mesh menu.
 Outliner rows open the object menu. Right-clicking something unselected
 selects it first, so the menu always acts on the thing under the pointer.
 Menus have a title, segmented tabs when there is more than one group, one
-level of submenu opening beside the panel, and **operator panels**: an
-operator's `props!` with Apply; once applied, further edits re-run it
-through adjust-last, so dragging Extrude's offset moves the extrusion live.
+level of submenu opening beside the panel, and (sparingly) **operator
+panels**: an operator's `props!` with Apply. *Amended 2026-09-02 (Alva):
+the menu is for verbs; settings live in the inspector.* Extrude, Subdivide
+and Merge by Distance are plain actions that run with defaults, and the
+Properties editor's "Adjust Last Operation" section shows their props and
+re-runs through adjust-last, so dragging Extrude's offset moves the
+extrusion live. Only Rename keeps an inline panel (it needs the text).
 A **tool strip floats outside the left edge**: square icon buttons whose
 active state is drawn amber (select mode, shading, grid, frame, edit mode).
 Icons are procedural line drawings. The panel has the accent outline and

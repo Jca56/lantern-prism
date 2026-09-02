@@ -71,7 +71,7 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
                     ui.state.cursor_icon = CursorIcon::Pointer;
                 }
                 let mods = ui.state.mods;
-                if ui.state.right_pressed && rect.contains(ui.state.pointer) && ui.state.popup.is_none() {
+                if ui.state.right_pressed && rect.contains(ui.state.pointer) && ui.state.popup.is_none_or(|(p, _)| !p.contains(ui.state.pointer)) {
                     context = Some(*id);
                 }
                 if r.double_clicked {
@@ -112,7 +112,7 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
             let _ = ctx.run("object.select", &[("id", Value::Id(id))]);
         }
         *ctx.context_menu = Some(crate::context_menu::MenuContext::Object(id));
-    } else if ui.state.right_pressed && ui.clip().contains(ui.state.pointer) && ui.state.popup.is_none() {
+    } else if ui.state.right_pressed && ui.clip().contains(ui.state.pointer) && ui.state.popup.is_none_or(|(p, _)| !p.contains(ui.state.pointer)) {
         *ctx.context_menu = Some(crate::context_menu::MenuContext::Scene);
     }
     if let Some((id, name)) = rename {

@@ -112,21 +112,35 @@ impl App {
         let mut out = None;
         let mut evs: &[Event] = &events;
         let mut command = None;
-        let mut picks = Vec::new();
+        let mut again = true;
         for _ in 0..MAX_REBUILDS {
             self.draw.clear();
             let mut o = self.shell.frame(evs, window_rect, self.scale, ws, &mut self.doc, &mut self.exec, &mut self.text, &mut self.draw);
-            let again = o.rebuild_again;
+            again = o.rebuild_again;
             command = command.or(o.window_command);
             if o.quit {
                 self.quit = true;
             }
-            picks.append(&mut o.picks);
-            out = Some(o);
             evs = &[];
+            // Clicks in viewports resolve against the GPU right away, then one
+            // more rebuild draws the new selection in this same frame. Doing it
+            // here (not after present) also means a failed swapchain acquire
+            // cannot swallow a click.
+            if !o.picks.is_empty() {
+                for pick in o.picks.drain(..) {
+                    let result = gfx.renderer.pick(&gfx.gpu, &self.doc, &pick);
+                    self.shell.apply_pick(&mut self.doc, &mut self.exec, &pick, result);
+                }
+                again = true;
+            }
+            out = Some(o);
             if !again {
                 break;
             }
+        }
+        if again {
+            // Out of rebuilds with work still pending: finish it next frame.
+            self.dirty = true;
         }
         let out = out.expect("at least one rebuild");
 
@@ -176,13 +190,6 @@ impl App {
         gfx.window.pre_present_notify();
         frame.present();
         log_trace!("frame: {} vertices", self.draw.vertex_count());
-
-        // Clicks in viewports resolve against the GPU after the frame.
-        for pick in picks {
-            let result = gfx.renderer.pick(&gfx.gpu, &self.doc, &pick);
-            self.shell.apply_pick(&mut self.doc, &mut self.exec, &pick, result);
-            self.dirty = true;
-        }
     }
 }
 

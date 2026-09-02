@@ -11,10 +11,14 @@ use crate::state::CursorIcon;
 use crate::theme::{Metrics, Theme};
 use crate::ui::{Sense, Ui};
 
+/// How far (logical px) the pointer may wander between press and release
+/// and still count as a click rather than a drag.
+const CLICK_SLOP: f64 = 8.0;
+
 /// Colors the viewport takes from the theme.
 pub fn view_colors(theme: &Theme, m: &Metrics) -> ViewColors {
     ViewColors {
-        bg: theme.field.scale_rgb(1.35),
+        bg: theme.field.scale_rgb(1.7),
         grid_minor: theme.border_light.fade(0.22),
         grid_major: theme.border_light.fade(0.5),
         axis_x: Color::hex(0xC0483E),
@@ -102,7 +106,7 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
     }
 
     // ---- right click: context menu for what is under the pointer -------------
-    if st.right_pressed && over && st.popup.is_none() {
+    if st.right_pressed && over {
         ctx.picks.push(PickRequest {
             purpose: prism_viewport::PickPurpose::ContextMenu,
             area: ctx.area,
@@ -118,7 +122,7 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
     }
 
     // ---- click selection ----------------------------------------------------
-    if r.clicked && !alt && (st.pointer - st.press_pos).length() < ui.m.px(4.0) {
+    if r.clicked && !alt && (st.pointer - st.press_pos).length() <= ui.m.px(CLICK_SLOP) {
         ctx.picks.push(PickRequest {
             purpose: prism_viewport::PickPurpose::Select,
             area: ctx.area,

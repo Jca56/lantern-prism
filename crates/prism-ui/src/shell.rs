@@ -185,7 +185,6 @@ impl Shell {
             }
         } else if st.pressed
             && self.drag_sep.is_none()
-            && self.popup.is_none()
             && let Some(a) = self.screen.area_at(st.press_pos)
             && st.popup.is_none_or(|(r, _)| !r.contains(st.press_pos))
         {
@@ -193,6 +192,7 @@ impl Shell {
         }
 
         // ---- popup (drawn first so it claims the pointer) --------------
+        let mut refresh_menu = false;
         if let Some(popup) = self.popup.as_mut() {
             let entries: Vec<(String, String)> = match popup {
                 Popup::Palette { query, .. } => {
@@ -204,17 +204,11 @@ impl Shell {
             ui.set_window_rect(window);
             let result = popups::draw(&mut ui, popup, window, &entries, doc, exec, &mut requests, pointer);
             ui.finish();
-            let flags = self.view_flags_for(None);
             if result.close {
                 self.popup = None;
-            } else if result.refresh
-                && let Some(Popup::Context(menu)) = self.popup.as_mut()
-            {
-                let mut fresh = ContextMenu::build(menu.context, doc, exec, menu.pos, flags);
-                fresh.tab = menu.tab.min(fresh.tabs.len().saturating_sub(1));
-                fresh.open_sub = menu.open_sub;
-                fresh.height = menu.height;
-                *menu = fresh;
+            } else {
+                // Rebuilt below, once the requests the tool raised have run.
+                refresh_menu = result.refresh;
             }
         }
 
@@ -386,6 +380,17 @@ impl Shell {
                 }
                 UiRequest::Undo | UiRequest::Redo | UiRequest::HistoryClear => {}
             }
+            self.state.request_rebuild = true;
+        }
+
+        // A tool in the context menu changed something it displays (shading,
+        // grid, select mode). Now that its request has been applied, rebuild
+        // the strip and title from live state; tabs keep their panels.
+        let flags = self.view_flags_for(None);
+        if refresh_menu && let Some(Popup::Context(menu)) = self.popup.as_mut() {
+            let fresh = ContextMenu::build(menu.context, doc, exec, menu.pos, flags);
+            menu.tools = fresh.tools;
+            menu.title = fresh.title;
             self.state.request_rebuild = true;
         }
 

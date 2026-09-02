@@ -29,6 +29,8 @@ pub enum Item {
     Action { label: String, op: String, overrides: Vec<(String, Value)> },
     Sub { label: String, items: Vec<Item> },
     /// An operator's properties with Apply; afterwards edits re-run it live.
+    /// Used sparingly (Rename): mesh tools are plain actions whose knobs
+    /// appear in the Properties editor's "Adjust Last Operation".
     OpPanel { op: String, label: String, props: Box<dyn Reflect>, applied: bool },
     /// The properties of an object, edited in place (undoable).
     ObjectProps(Id),
@@ -171,13 +173,14 @@ impl ContextMenu {
                     MenuContext::Element { kind, .. } => format!("{} · {selected} selected", kind.label()),
                     _ => format!("Mesh · {selected} selected"),
                 };
-                let mut edit: Vec<Item> = Vec::new();
-                for op in ["mesh.extrude", "mesh.subdivide", "mesh.merge_by_distance"] {
-                    if let Some(p) = op_panel(exec, op) {
-                        edit.push(p);
-                    }
-                }
-                edit.push(Item::Separator);
+                // Verbs only: each runs with its defaults, and the Properties
+                // editor's "Adjust Last Operation" holds the knobs afterwards.
+                let mut edit: Vec<Item> = vec![
+                    act("Extrude", "mesh.extrude", vec![]),
+                    act("Subdivide", "mesh.subdivide", vec![]),
+                    act("Merge by Distance", "mesh.merge_by_distance", vec![]),
+                    Item::Separator,
+                ];
                 edit.push(Item::Sub {
                     label: "Delete".into(),
                     items: vec![
@@ -260,8 +263,10 @@ mod tests {
         assert!(el.title.starts_with("Face"));
         assert_eq!(el.tools[0].icon, Icon::Vertex);
         assert!(el.tools[0].active, "vertex mode is the scene default");
-        let panels = el.tabs[0].items.iter().filter(|i| matches!(i, Item::OpPanel { .. })).count();
-        assert_eq!(panels, 3);
+        assert!(!el.tabs[0].items.iter().any(|i| matches!(i, Item::OpPanel { .. })), "knobs live in the Properties editor");
+        for op in ["mesh.extrude", "mesh.subdivide", "mesh.merge_by_distance"] {
+            assert!(el.tabs[0].items.iter().any(|i| matches!(i, Item::Action { op: o, .. } if o == op)), "{op} is a plain action");
+        }
         assert!(el.tabs[0].items.iter().any(|i| matches!(i, Item::Sub { label, items } if label == "Delete" && items.len() == 4)));
     }
 

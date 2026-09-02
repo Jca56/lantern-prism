@@ -299,7 +299,8 @@ impl Renderer {
     }
 
     /// Render ids for one viewport and read back a window around the cursor.
-    /// Synchronous: waits for the GPU. Only runs on a click.
+    /// Synchronous: waits for the GPU. Only runs on a click. Needs no
+    /// swapchain frame: it draws into its own target.
     pub fn pick(&mut self, gpu: &Gpu, doc: &Doc, req: &PickRequest) -> PickResult {
         let size = [req.rect.width().max(1.0) as u32, req.rect.height().max(1.0) as u32];
         let local = req.pos - req.rect.min;
@@ -365,17 +366,19 @@ impl Renderer {
                     pass.set_index_buffer(g.tri_index.slice(..), wgpu::IndexFormat::Uint32);
                     pass.draw_indexed(0..g.tri_index_count, 0, 0..1);
                 }
-                if element_mode {
-                    if g.edge_vertex_count > 0 {
-                        pass.set_pipeline(&self.pipes.pick_lines);
-                        pass.set_vertex_buffer(0, g.edge_pos.slice(..));
-                        pass.draw(0..g.edge_vertex_count, 0..1);
-                    }
-                    if g.vert_count > 0 {
-                        pass.set_pipeline(&self.pipes.pick_points);
-                        pass.set_vertex_buffer(0, g.vert_pos.slice(..));
-                        pass.draw(0..6, 0..g.vert_count);
-                    }
+                // Faces always draw (they occlude); only the wanted kind of
+                // finer element goes on top. Drawing the others too would
+                // stamp their ids over the faces (a vertex dot is ~15 px) and
+                // a face click near a corner would find nothing.
+                if req.mode == PickMode::Edge && g.edge_vertex_count > 0 {
+                    pass.set_pipeline(&self.pipes.pick_lines);
+                    pass.set_vertex_buffer(0, g.edge_pos.slice(..));
+                    pass.draw(0..g.edge_vertex_count, 0..1);
+                }
+                if req.mode == PickMode::Vertex && g.vert_count > 0 {
+                    pass.set_pipeline(&self.pipes.pick_points);
+                    pass.set_vertex_buffer(0, g.vert_pos.slice(..));
+                    pass.draw(0..6, 0..g.vert_count);
                 }
             }
         }
