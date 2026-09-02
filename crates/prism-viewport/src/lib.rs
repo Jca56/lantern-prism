@@ -9,4 +9,4 @@ pub mod request;
 
 pub use camera::{Camera, ViewPreset};
 pub use gpu::renderer::{PreparedFrame, Renderer};
-pub use request::{Nav, Overlays, PickMode, PickRequest, PickResult, Shading, ViewColors, ViewportRequest, ViewportState, scene_bounds};
+pub use request::{Nav, Overlays, PickMode, PickPurpose, PickRequest, PickResult, Shading, ViewColors, ViewportRequest, ViewportState, scene_bounds};

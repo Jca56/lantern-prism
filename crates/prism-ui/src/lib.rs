@@ -12,7 +12,9 @@
 //! A rebuild happens whenever an input event arrives; an idle editor rebuilds
 //! nothing and draws nothing.
 
+pub mod context_menu;
 pub mod editors;
+pub mod icons;
 pub mod event;
 pub mod id;
 pub mod panel;

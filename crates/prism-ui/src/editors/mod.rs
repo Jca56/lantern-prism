@@ -80,6 +80,21 @@ pub struct EditorCtx<'a> {
     /// 3D viewports to render this frame, and clicks to resolve after.
     pub viewports: &'a mut Vec<ViewportRequest>,
     pub picks: &'a mut Vec<PickRequest>,
+    /// Set by an editor to open a context menu at the pointer.
+    pub context_menu: &'a mut Option<crate::context_menu::MenuContext>,
+}
+
+/// Run one operator from the UI, collecting its requests.
+pub fn run_op(doc: &mut Doc, exec: &mut Executor, pointer: Vec2, op: &str, overrides: &[(String, Value)], requests: &mut Vec<UiRequest>) -> OpResult<Outcome> {
+    let mut ctx = Ctx::new(doc);
+    ctx.pointer = pointer;
+    let ov: Vec<(&str, Value)> = overrides.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+    let r = exec.run_with(op, &ov, &mut ctx);
+    requests.append(&mut exec.requests);
+    if r.is_ok() && (op == "wm.save" || op == "wm.save_as") {
+        exec.mark_saved();
+    }
+    r
 }
 
 impl EditorCtx<'_> {
@@ -98,22 +113,21 @@ impl EditorCtx<'_> {
     /// Record a direct property edit as an undo step. While the pointer is
     /// held (a drag), consecutive edits with the same label coalesce.
     pub fn record_edit(&mut self, before: Doc, label: &str, dragging: bool) {
-        if dragging
-            && let Some(last) = self.exec.history.last_mut()
-            && last.op_id == "ui.edit"
-            && last.label == label
-        {
-            last.after = self.doc.clone();
-            return;
-        }
-        self.exec.history.push(UndoStep {
-            before,
-            after: self.doc.clone(),
-            label: label.to_owned(),
-            op_id: "ui.edit".to_owned(),
-            props: None,
-        });
+        record_edit(self.exec, self.doc, before, label, dragging);
     }
+}
+
+/// Record a direct property edit as an undo step (see `EditorCtx::record_edit`).
+pub fn record_edit(exec: &mut Executor, doc: &Doc, before: Doc, label: &str, dragging: bool) {
+    if dragging
+        && let Some(last) = exec.history.last_mut()
+        && last.op_id == "ui.edit"
+        && last.label == label
+    {
+        last.after = doc.clone();
+        return;
+    }
+    exec.history.push(UndoStep { before, after: doc.clone(), label: label.to_owned(), op_id: "ui.edit".to_owned(), props: None });
 }
 
 /// Editor-specific controls in the area header, after the editor dropdown.

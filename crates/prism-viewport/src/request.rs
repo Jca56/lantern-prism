@@ -108,8 +108,18 @@ pub enum PickMode {
     Face,
 }
 
+/// Why a pick was requested.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum PickPurpose {
+    #[default]
+    Select,
+    /// Right click: open the context menu for what was hit.
+    ContextMenu,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PickRequest {
+    pub purpose: PickPurpose,
     pub area: usize,
     pub rect: Rect,
     pub camera: Camera,

@@ -36,7 +36,41 @@ impl Operator for FrameSelected {
     }
 }
 
+props! {
+    pub struct ShadingProps {
+        pub wire: bool = false => { id: 1 },
+    }
+}
+
+pub struct Shading;
+impl Operator for Shading {
+    const ID: &'static str = "view3d.shading";
+    const LABEL: &'static str = "Viewport Shading";
+    const FLAGS: OpFlags = OpFlags::REGISTER;
+    type Props = ShadingProps;
+    type Modal = ();
+    fn exec(ctx: &mut Ctx, p: &ShadingProps) -> OpResult<Outcome> {
+        ctx.request(UiRequest::ViewShading { wire: p.wire });
+        Ok(Outcome::Finished)
+    }
+}
+
+pub struct ToggleGrid;
+impl Operator for ToggleGrid {
+    const ID: &'static str = "view3d.toggle_grid";
+    const LABEL: &'static str = "Toggle Grid";
+    const FLAGS: OpFlags = OpFlags::REGISTER;
+    type Props = Empty;
+    type Modal = ();
+    fn exec(ctx: &mut Ctx, _: &Empty) -> OpResult<Outcome> {
+        ctx.request(UiRequest::ViewToggleGrid);
+        Ok(Outcome::Finished)
+    }
+}
+
 pub fn register(r: &mut Registry) {
     r.register::<FrameAll>();
     r.register::<FrameSelected>();
+    r.register::<Shading>();
+    r.register::<ToggleGrid>();
 }

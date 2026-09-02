@@ -101,9 +101,26 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
         st.wheel = Vec2::ZERO;
     }
 
+    // ---- right click: context menu for what is under the pointer -------------
+    if st.right_pressed && over && st.popup.is_none() {
+        ctx.picks.push(PickRequest {
+            purpose: prism_viewport::PickPurpose::ContextMenu,
+            area: ctx.area,
+            rect,
+            camera: vp.camera,
+            pos: st.pointer,
+            mode,
+            radius: ui.m.px(14.0),
+            extend: false,
+            toggle: false,
+            colors,
+        });
+    }
+
     // ---- click selection ----------------------------------------------------
     if r.clicked && !alt && (st.pointer - st.press_pos).length() < ui.m.px(4.0) {
         ctx.picks.push(PickRequest {
+            purpose: prism_viewport::PickPurpose::Select,
             area: ctx.area,
             rect,
             camera: vp.camera,

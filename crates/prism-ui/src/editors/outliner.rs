@@ -42,6 +42,7 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
     let ids = ctx.doc.scene_objects();
     let active = ctx.doc.active_object_id();
     let mut click: Option<(Id, bool, bool)> = None;
+    let mut context: Option<Id> = None;
     let mut rename: Option<(Id, String)> = None;
     let mut commit_rename: Option<String> = None;
     let mut cancel_rename = false;
@@ -70,6 +71,9 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
                     ui.state.cursor_icon = CursorIcon::Pointer;
                 }
                 let mods = ui.state.mods;
+                if ui.state.right_pressed && rect.contains(ui.state.pointer) && ui.state.popup.is_none() {
+                    context = Some(*id);
+                }
                 if r.double_clicked {
                     rename = Some((*id, obj.name.clone()));
                 } else if r.clicked {
@@ -102,6 +106,14 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
 
     if let Some((id, extend, toggle)) = click {
         let _ = ctx.run("object.select", &[("id", Value::Id(id)), ("extend", Value::Bool(extend)), ("toggle", Value::Bool(toggle))]);
+    }
+    if let Some(id) = context {
+        if !ctx.doc.objects.get(id).is_some_and(|o| o.selected) {
+            let _ = ctx.run("object.select", &[("id", Value::Id(id))]);
+        }
+        *ctx.context_menu = Some(crate::context_menu::MenuContext::Object(id));
+    } else if ui.state.right_pressed && ui.clip().contains(ui.state.pointer) && ui.state.popup.is_none() {
+        *ctx.context_menu = Some(crate::context_menu::MenuContext::Scene);
     }
     if let Some((id, name)) = rename {
         let _ = ctx.run("object.select", &[("id", Value::Id(id))]);

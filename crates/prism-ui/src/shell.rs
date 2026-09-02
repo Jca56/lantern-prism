@@ -10,9 +10,10 @@ use prism_ops::{Ctx, Executor, KeyConfig, UiRequest};
 use prism_props::Value;
 use prism_render::DrawList;
 use prism_text::TextEngine;
-use prism_viewport::{PickRequest, PickResult, ViewportRequest};
+use prism_viewport::{PickPurpose, PickRequest, PickResult, Shading, ViewportRequest};
 
-use crate::editors::{EditorCtx, EditorKind, GalleryState, OutlinerState, Prefs, PropertiesState, draw_editor, draw_editor_header};
+use crate::context_menu::{ContextMenu, MenuContext, ViewFlags};
+use crate::editors::{EditorCtx, EditorKind, GalleryState, OutlinerState, Prefs, PropertiesState, draw_editor, draw_editor_header, run_op};
 use crate::event::Event;
 use crate::id::WidgetId;
 use crate::popups::{self, Popup};
@@ -70,18 +71,6 @@ impl Default for Shell {
     }
 }
 
-/// Run one operator from the UI, collecting its requests.
-fn run_op(doc: &mut Doc, exec: &mut Executor, pointer: Vec2, op: &str, overrides: &[(String, Value)], requests: &mut Vec<UiRequest>) {
-    let mut ctx = Ctx::new(doc);
-    ctx.pointer = pointer;
-    let ov: Vec<(&str, Value)> = overrides.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
-    let r = exec.run_with(op, &ov, &mut ctx);
-    requests.append(&mut exec.requests);
-    if r.is_ok() && (op == "wm.save" || op == "wm.save_as") {
-        exec.mark_saved();
-    }
-}
-
 impl Shell {
     /// Default layout: viewport left; outliner over properties on the right.
     pub fn new() -> Self {
@@ -136,6 +125,7 @@ impl Shell {
         let mut requests: Vec<UiRequest> = Vec::new();
         let mut viewports: Vec<ViewportRequest> = Vec::new();
         let mut picks: Vec<PickRequest> = Vec::new();
+        let mut context_menu: Option<MenuContext> = None;
         let pointer = self.state.pointer;
 
         // A running modal operator sees every event first.
@@ -212,13 +202,19 @@ impl Shell {
             };
             let mut ui = Ui::new(draw, text, &theme, m, &mut self.state, window, window, WidgetId::ROOT.with("popup"), 0);
             ui.set_window_rect(window);
-            let (commands, close) = popups::draw(&mut ui, popup, window, &entries);
+            let result = popups::draw(&mut ui, popup, window, &entries, doc, exec, &mut requests, pointer);
             ui.finish();
-            for (op, overrides) in commands {
-                run_op(doc, exec, pointer, &op, &overrides, &mut requests);
-            }
-            if close {
+            let flags = self.view_flags_for(None);
+            if result.close {
                 self.popup = None;
+            } else if result.refresh
+                && let Some(Popup::Context(menu)) = self.popup.as_mut()
+            {
+                let mut fresh = ContextMenu::build(menu.context, doc, exec, menu.pos, flags);
+                fresh.tab = menu.tab.min(fresh.tabs.len().saturating_sub(1));
+                fresh.open_sub = menu.open_sub;
+                fresh.height = menu.height;
+                *menu = fresh;
             }
         }
 
@@ -271,6 +267,7 @@ impl Shell {
                         viewport: area_vp,
                         viewports: &mut viewports,
                         picks: &mut picks,
+                        context_menu: &mut context_menu,
                     };
                     draw_editor_header(kind, ui, &mut ctx);
                 }
@@ -304,6 +301,7 @@ impl Shell {
                 viewport: area_vp,
                 viewports: &mut viewports,
                 picks: &mut picks,
+                context_menu: &mut context_menu,
             };
             changed_globals |= draw_editor(kind, &mut ui, &mut ctx);
             ui.finish();
@@ -340,10 +338,17 @@ impl Shell {
                     self.keys.resolve(&contexts, &ev, |op| exec.registry.get(op).is_some_and(|i| i.poll(&ctx))).cloned()
                 };
                 if let Some(item) = item {
-                    run_op(doc, exec, pointer, &item.op, &item.overrides, &mut requests);
+                    let _ = run_op(doc, exec, pointer, &item.op, &item.overrides, &mut requests);
                     self.state.request_rebuild = true;
                 }
             }
+        }
+
+        // ---- context menus asked for by editors ---------------------------
+        if let Some(mc) = context_menu {
+            let flags = self.view_flags_for(None);
+            self.popup = Some(Popup::Context(ContextMenu::build(mc, doc, exec, pointer, flags)));
+            self.state.request_rebuild = true;
         }
 
         // ---- requests from operators --------------------------------------
@@ -359,15 +364,24 @@ impl Shell {
                 UiRequest::Quit => quit = true,
                 UiRequest::ViewFrame { selected } => {
                     let bounds = prism_viewport::scene_bounds(doc, selected);
-                    let target = self
-                        .screen
-                        .active
-                        .filter(|&a| self.screen.area(a).is_some_and(|ar| ar.editor == EditorKind::Viewport))
-                        .or_else(|| layouts.iter().map(|l| l.area).find(|&a| self.screen.area(a).is_some_and(|ar| ar.editor == EditorKind::Viewport)));
-                    if let Some(a) = target
+                    if let Some(a) = self.target_viewport()
                         && let Some(area) = self.screen.area_mut(a)
                     {
                         area.viewport.camera.frame(&bounds);
+                    }
+                }
+                UiRequest::ViewShading { wire } => {
+                    if let Some(a) = self.target_viewport()
+                        && let Some(area) = self.screen.area_mut(a)
+                    {
+                        area.viewport.shading = if wire { Shading::Wire } else { Shading::Solid };
+                    }
+                }
+                UiRequest::ViewToggleGrid => {
+                    if let Some(a) = self.target_viewport()
+                        && let Some(area) = self.screen.area_mut(a)
+                    {
+                        area.viewport.overlays.grid = !area.viewport.overlays.grid;
                     }
                 }
                 UiRequest::Undo | UiRequest::Redo | UiRequest::HistoryClear => {}
@@ -401,9 +415,43 @@ impl Shell {
         ShellOutput { cursor, rebuild_again: self.state.request_rebuild, clear: theme.bg, window_command, quit, viewports, picks }
     }
 
-    /// Turn a resolved pick into a selection operator.
+    /// The viewport area view requests apply to: the active one if it is a
+    /// viewport, else the first viewport on screen.
+    fn target_viewport(&self) -> Option<AreaId> {
+        let is_vp = |a: AreaId| self.screen.area(a).is_some_and(|ar| ar.editor == EditorKind::Viewport);
+        self.screen.active.filter(|&a| is_vp(a)).or_else(|| self.screen.layouts().iter().map(|l| l.area).find(|&a| is_vp(a)))
+    }
+
+    /// Display flags of a viewport area (for the context menu's tool strip).
+    fn view_flags_for(&self, area: Option<AreaId>) -> ViewFlags {
+        area.or_else(|| self.target_viewport())
+            .and_then(|a| self.screen.area(a))
+            .map_or(ViewFlags::default(), |ar| ViewFlags { wire: ar.viewport.shading == Shading::Wire, grid: ar.viewport.overlays.grid })
+    }
+
+    /// Turn a resolved pick into a selection operator, or open the context
+    /// menu for a right click.
     pub fn apply_pick(&mut self, doc: &mut Doc, exec: &mut Executor, req: &PickRequest, result: PickResult) {
         let mut requests = Vec::new();
+        if req.purpose == PickPurpose::ContextMenu {
+            // Right-clicking something unselected selects it first.
+            let selected = match result {
+                PickResult::Object(id) => doc.objects.get(id).is_some_and(|o| o.selected),
+                PickResult::Vert(m, v) => doc.meshes.get(m).is_some_and(|b| b.mesh.vert_attrs().bools(prism_mesh::tables::V_SELECT)[v.idx()]),
+                PickResult::Edge(m, e) => doc.meshes.get(m).is_some_and(|b| b.mesh.edge_attrs().bools(prism_mesh::tables::E_SELECT)[e.idx()]),
+                PickResult::Face(m, f) => doc.meshes.get(m).is_some_and(|b| b.mesh.face_attrs().bools(prism_mesh::tables::F_SELECT)[f.idx()]),
+                PickResult::Nothing => true,
+            };
+            if !selected {
+                let plain = PickRequest { extend: false, toggle: false, purpose: PickPurpose::Select, ..*req };
+                self.apply_pick(doc, exec, &plain, result);
+            }
+            let context = ContextMenu::context_for(doc, result);
+            let flags = self.view_flags_for(Some(req.area));
+            self.popup = Some(Popup::Context(ContextMenu::build(context, doc, exec, req.pos, flags)));
+            self.state.request_rebuild = true;
+            return;
+        }
         let ov = |extra: Vec<(String, Value)>| -> Vec<(String, Value)> {
             let mut v = vec![("extend".to_owned(), Value::Bool(req.extend)), ("toggle".to_owned(), Value::Bool(req.toggle))];
             v.extend(extra);
@@ -413,13 +461,21 @@ impl Shell {
             PickResult::Nothing => {
                 if !req.extend && !req.toggle {
                     let op = if req.mode == prism_viewport::PickMode::Object { "object.select_all" } else { "mesh.select_all" };
-                    run_op(doc, exec, req.pos, op, &[("action".to_owned(), Value::Enum(2))], &mut requests);
+                    let _ = run_op(doc, exec, req.pos, op, &[("action".to_owned(), Value::Enum(2))], &mut requests);
                 }
             }
-            PickResult::Object(id) => run_op(doc, exec, req.pos, "object.select", &ov(vec![("id".to_owned(), Value::Id(id))]), &mut requests),
-            PickResult::Vert(_, v) => run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(0)), ("handle".to_owned(), Value::I64(v.to_raw() as i64))]), &mut requests),
-            PickResult::Edge(_, e) => run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(1)), ("handle".to_owned(), Value::I64(e.to_raw() as i64))]), &mut requests),
-            PickResult::Face(_, f) => run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(2)), ("handle".to_owned(), Value::I64(f.to_raw() as i64))]), &mut requests),
+            PickResult::Object(id) => {
+                let _ = run_op(doc, exec, req.pos, "object.select", &ov(vec![("id".to_owned(), Value::Id(id))]), &mut requests);
+            }
+            PickResult::Vert(_, v) => {
+                let _ = run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(0)), ("handle".to_owned(), Value::I64(v.to_raw() as i64))]), &mut requests);
+            }
+            PickResult::Edge(_, e) => {
+                let _ = run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(1)), ("handle".to_owned(), Value::I64(e.to_raw() as i64))]), &mut requests);
+            }
+            PickResult::Face(_, f) => {
+                let _ = run_op(doc, exec, req.pos, "mesh.select", &ov(vec![("kind".to_owned(), Value::Enum(2)), ("handle".to_owned(), Value::I64(f.to_raw() as i64))]), &mut requests);
+            }
         }
         self.state.request_rebuild = true;
     }

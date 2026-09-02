@@ -302,6 +302,29 @@ preview needs it, as a graph change, not an architecture change.
 **Rejected:** Rendering viewports to textures and sampling them from the 2D
 pass (needs per-command texture binding, breaks the single UI draw).
 
+## D023 — The right-click context menu is the primary discoverable surface
+**Status:** Accepted (Alva, 2026-09-02: "instead of doing 8 million keybinds…")
+**Decision:** Right-click opens a menu built from what was under the pointer.
+In a viewport a pick runs first: nothing → Scene (Add / View / Select);
+an object → that object (actions, live transform panel); in edit mode an
+element → element menu (Extrude, Subdivide, Merge as live operator panels,
+Delete and Dissolve submenus, normals) and empty space → the mesh menu.
+Outliner rows open the object menu. Right-clicking something unselected
+selects it first, so the menu always acts on the thing under the pointer.
+Menus have a title, segmented tabs when there is more than one group, one
+level of submenu opening beside the panel, and **operator panels**: an
+operator's `props!` with Apply; once applied, further edits re-run it
+through adjust-last, so dragging Extrude's offset moves the extrusion live.
+A **tool strip floats outside the left edge**: square icon buttons whose
+active state is drawn amber (select mode, shading, grid, frame, edit mode).
+Icons are procedural line drawings. The panel has the accent outline and
+shadow of Spark's floating panels.
+Keymaps stay for the handful of things a hand knows (undo, save, Tab, A, X)
+but nothing is *only* reachable by key.
+**Why:** Discoverability scales with features; a keymap does not. The menu
+is one more door into the operator registry (D007), so it costs no new
+verbs, only a `MenuContext → ContextMenu` builder per situation.
+
 ---
 
 ## Open questions
