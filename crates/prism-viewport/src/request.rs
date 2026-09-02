@@ -28,13 +28,16 @@ impl Default for Overlays {
     }
 }
 
-/// A navigation drag in progress.
+/// A pointer drag in progress on the viewport body. Decided once the drag
+/// passes the click slop and kept until the button comes up.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum Nav {
+pub enum Drag {
     #[default]
     None,
     Orbit,
     Pan,
+    /// Ctrl+drag: a selection box (D025).
+    Box,
 }
 
 /// Which transform gizmo a viewport shows (D024). R cycles through them.
@@ -90,7 +93,7 @@ pub struct ViewportState {
     pub camera: Camera,
     pub shading: Shading,
     pub overlays: Overlays,
-    pub nav: Nav,
+    pub drag: Drag,
     pub gizmo: GizmoMode,
     /// The handle a drag started from, while its transform runs.
     pub gizmo_drag: Option<GizmoHandle>,

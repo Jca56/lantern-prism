@@ -1,12 +1,14 @@
-//! The 3D viewport editor: navigation, click selection, header controls.
-//! Drawing happens in `prism-viewport`; this records what to draw and where.
+//! The 3D viewport editor: navigation, click and box selection, the gizmo,
+//! and the header controls. Drawing happens in `prism-viewport`; this records
+//! what to draw and where.
 
 use prism_doc::{ObjectMode, SelectMode};
 use prism_math::{Color, Rect, Vec2};
 use prism_ops::{UiRequest, ViewInfo};
-use prism_viewport::{Camera, GizmoMode, PickMode, PickRequest, Shading, ViewColors, ViewPreset, ViewportRequest};
+use prism_viewport::{Camera, Drag, GizmoMode, PickMode, PickPurpose, PickRequest, Shading, ViewColors, ViewPreset, ViewportRequest};
 
 use crate::editors::{EditorCtx, gizmo};
+use crate::icons::{Icon, gizmo_icon};
 use crate::state::CursorIcon;
 use crate::theme::{Metrics, Theme};
 use crate::ui::{Sense, Ui};
@@ -52,19 +54,31 @@ fn pick_mode(ctx: &EditorCtx) -> PickMode {
     }
 }
 
-/// Header controls: shading, overlays, view presets, frame.
+/// Header controls as icon buttons: shading, grid, frame all, the gizmo;
+/// then the wire overlay and the view menu.
 pub fn header(ui: &mut Ui, ctx: &mut EditorCtx) {
     let vp = &mut *ctx.viewport;
-    let mut shading = if vp.shading == Shading::Wire { 1 } else { 0 };
-    if ui.dropdown("shading", &mut shading, &["Solid", "Wireframe"]) {
-        vp.shading = if shading == 1 { Shading::Wire } else { Shading::Solid };
+    let gap = ui.m.gap;
+    if ui.icon_button("solid", Icon::Solid, vp.shading == Shading::Solid).clicked {
+        vp.shading = Shading::Solid;
     }
+    if ui.icon_button("wireframe", Icon::Wire, vp.shading == Shading::Wire).clicked {
+        vp.shading = Shading::Wire;
+    }
+    if ui.icon_button("grid", Icon::Grid, vp.overlays.grid).clicked {
+        vp.overlays.grid = !vp.overlays.grid;
+    }
+    if ui.icon_button("frame", Icon::Frame, false).clicked {
+        ctx.requests.push(UiRequest::ViewFrame { selected: false });
+    }
+    ui.alloc(Vec2::new(gap, 1.0));
+    for g in GizmoMode::ALL {
+        if ui.icon_button(g.label(), gizmo_icon(g), vp.gizmo == g).clicked {
+            vp.gizmo = g;
+        }
+    }
+    ui.alloc(Vec2::new(gap, 1.0));
     ui.toggle("Wire", &mut vp.overlays.wire);
-    ui.toggle("Grid", &mut vp.overlays.grid);
-    let mut gizmo = vp.gizmo.index();
-    if ui.dropdown("gizmo", &mut gizmo, &["Move", "Rotate", "Scale"]) {
-        vp.gizmo = GizmoMode::from_index(gizmo);
-    }
     if let Some(i) = ui.menu_button("View", &["Perspective / Ortho", "Front", "Back", "Right", "Left", "Top", "Bottom", "Frame All", "Frame Selected"]) {
         match i {
             0 => vp.camera.ortho = !vp.camera.ortho,
@@ -89,95 +103,73 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
     gizmo::draw(ui, ctx, rect);
     let vp = &mut *ctx.viewport;
 
-    // ---- navigation -------------------------------------------------------
+    // ---- the pointer on the body ----------------------------------------------
     let r = ui.interact(ui.id("body"), rect, Sense::DRAG);
     let st = &mut *ui.state;
     let over = st.pointer_in_window && rect.contains(st.pointer) && st.popup.is_none_or(|(p, _)| !p.contains(st.pointer));
-    let alt = st.mods.alt();
-    // Middle drag: orbit, Shift for pan.
+    let dragged = (st.pointer - st.press_pos).length() > ui.m.px(CLICK_SLOP);
+
+    // A left drag past the slop commits to one thing for the rest of the
+    // press, chosen by the modifiers held as it begins: Ctrl draws a selection
+    // box, Shift pans, plain orbits. The middle button orbits (Shift pans) as
+    // well, for hands that know it.
+    if r.held && vp.drag == Drag::None && dragged {
+        vp.drag = if st.mods.ctrl() {
+            Drag::Box
+        } else if st.mods.shift() {
+            Drag::Pan
+        } else {
+            Drag::Orbit
+        };
+    }
     if st.middle_pressed && rect.contains(st.middle_press_pos) && st.popup.is_none() {
-        vp.nav = if st.mods.shift() { prism_viewport::Nav::Pan } else { prism_viewport::Nav::Orbit };
+        vp.drag = if st.mods.shift() { Drag::Pan } else { Drag::Orbit };
     }
-    if !(st.middle_down || (r.held && alt)) {
-        vp.nav = prism_viewport::Nav::None;
-    }
-    if r.pressed && alt {
-        vp.nav = if st.mods.shift() { prism_viewport::Nav::Pan } else { prism_viewport::Nav::Orbit };
-    }
-    let dragging_nav = (st.middle_down || (r.held && alt)) && vp.nav != prism_viewport::Nav::None;
-    if dragging_nav {
-        let d = st.delta;
-        match vp.nav {
-            prism_viewport::Nav::Orbit => vp.camera.orbit(d.x, d.y),
-            prism_viewport::Nav::Pan => vp.camera.pan(d.x, d.y, rect.height()),
-            prism_viewport::Nav::None => {}
+    let holding = r.held || st.middle_down;
+    match vp.drag {
+        Drag::Orbit if holding => {
+            vp.camera.orbit(st.delta.x, st.delta.y);
+            st.cursor_icon = CursorIcon::Grabbing;
         }
-        st.cursor_icon = CursorIcon::Grabbing;
+        Drag::Pan if holding => {
+            vp.camera.pan(st.delta.x, st.delta.y, rect.height());
+            st.cursor_icon = CursorIcon::Grabbing;
+        }
+        _ => {}
     }
     if over && st.wheel.y != 0.0 {
         vp.camera.zoom(st.wheel.y / ui.m.widget_h);
         st.wheel = Vec2::ZERO;
     }
 
-    // ---- right click: context menu for what is under the pointer -------------
+    let (area, camera, pos, radius) = (ctx.area, vp.camera, st.pointer, ui.m.px(14.0));
+    let request = move |purpose: PickPurpose, extend: bool, toggle: bool, region: Rect| PickRequest { purpose, area, rect, camera, pos, mode, radius, extend, toggle, region, colors };
+
+    // ---- right click: context menu for what is under the pointer ---------------
     if st.right_pressed && over {
-        ctx.picks.push(PickRequest {
-            purpose: prism_viewport::PickPurpose::ContextMenu,
-            area: ctx.area,
-            rect,
-            camera: vp.camera,
-            pos: st.pointer,
-            mode,
-            radius: ui.m.px(14.0),
-            extend: false,
-            toggle: false,
-            region: Rect::ZERO,
-            colors,
-        });
+        ctx.picks.push(request(PickPurpose::ContextMenu, false, false, Rect::ZERO));
     }
 
-    // ---- click selection ----------------------------------------------------
-    if r.clicked && !alt && (st.pointer - st.press_pos).length() <= ui.m.px(CLICK_SLOP) {
-        ctx.picks.push(PickRequest {
-            purpose: prism_viewport::PickPurpose::Select,
-            area: ctx.area,
-            rect,
-            camera: vp.camera,
-            pos: st.pointer,
-            mode,
-            radius: ui.m.px(14.0),
-            extend: st.mods.shift(),
-            toggle: st.mods.ctrl(),
-            region: Rect::ZERO,
-            colors,
-        });
-    }
-
-    // ---- box select: a left drag on the body (D025) ---------------------------
-    let dragged = (st.pointer - st.press_pos).length() > ui.m.px(CLICK_SLOP);
+    // ---- selection: a click picks; a Ctrl-drag boxes (D025) ---------------------
     let region = Rect::new(st.press_pos.min(st.pointer), st.press_pos.max(st.pointer)).intersection(&rect);
-    if r.held && !alt && dragged {
+    if vp.drag == Drag::Box && r.held {
         let c = ui.theme.selection;
         ui.draw.rect(region, c.fade(0.18));
         ui.draw.stroke_rect(region, ui.m.px(2.0), 0.0, c);
     }
-    if r.released && !alt && dragged && !region.is_empty() {
-        ctx.picks.push(PickRequest {
-            purpose: prism_viewport::PickPurpose::Box,
-            area: ctx.area,
-            rect,
-            camera: vp.camera,
-            pos: st.pointer,
-            mode,
-            radius: 0.0,
-            extend: st.mods.shift(),
-            toggle: st.mods.ctrl(),
-            region,
-            colors,
-        });
+    if r.released {
+        match vp.drag {
+            // Ctrl+Shift extends the selection, Ctrl+Alt subtracts from it.
+            Drag::Box if !region.is_empty() => ctx.picks.push(request(PickPurpose::Box, st.mods.shift(), st.mods.alt(), region)),
+            Drag::None if r.clicked && !dragged => ctx.picks.push(request(PickPurpose::Select, st.mods.shift(), st.mods.ctrl(), Rect::ZERO)),
+            _ => {}
+        }
+    }
+    if !holding {
+        vp.drag = Drag::None;
     }
 
-    // ---- what to draw --------------------------------------------------------
+    // ---- what to draw ----------------------------------------------------------
     ctx.viewports.push(ViewportRequest { area: ctx.area, rect, state: *vp, colors });
 
     // Overlays on top of the 3D: an inner shadow so the well reads as sunk,

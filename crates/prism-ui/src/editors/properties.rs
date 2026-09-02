@@ -1,9 +1,10 @@
 //! Properties: the active object, its data, the scene, and the undo history,
 //! plus "Adjust Last Operation". Every panel is generated from `props!`.
 
-use prism_doc::DataKind;
+use prism_doc::{DataKind, ObjectMode};
 use prism_math::Vec2;
 use prism_ops::Ctx;
+use prism_props::Value;
 
 use crate::editors::EditorCtx;
 use crate::state::CursorIcon;
@@ -77,6 +78,9 @@ fn data_tab(ui: &mut Ui, ctx: &mut EditorCtx) {
                     }
                 }
             }
+            if obj.mode == ObjectMode::Edit {
+                mesh_tools(ui, ctx);
+            }
         }
         DataKind::Camera => {
             if let Some(c) = ctx.doc.cameras.get_mut(obj.data) {
@@ -97,6 +101,31 @@ fn data_tab(ui: &mut Ui, ctx: &mut EditorCtx) {
     if changed {
         ctx.record_edit(before, "Edit Data", dragging);
     }
+}
+
+/// Edit-mode actions too rare for the context menu (Alva, 2026-09-02).
+fn mesh_tools(ui: &mut Ui, ctx: &mut EditorCtx) {
+    ui.collapsing("Mesh Tools", |ui| {
+        ui.push_id("mesh_tools");
+        ui.label_dim("Dissolve");
+        ui.row(|ui| {
+            for (i, label) in ["Vertices", "Edges", "Faces"].iter().enumerate() {
+                if ui.button(label).clicked {
+                    let _ = ctx.run("mesh.dissolve", &[("kind", Value::Enum(i as i64))]);
+                }
+            }
+        });
+        ui.label_dim("Normals");
+        ui.row(|ui| {
+            if ui.button("Flip").clicked {
+                let _ = ctx.run("mesh.flip_normals", &[]);
+            }
+            if ui.button("Recalculate").clicked {
+                let _ = ctx.run("mesh.normals_make_consistent", &[]);
+            }
+        });
+        ui.pop_id();
+    });
 }
 
 fn scene_tab(ui: &mut Ui, ctx: &mut EditorCtx) {

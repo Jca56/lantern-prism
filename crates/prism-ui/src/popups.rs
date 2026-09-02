@@ -3,15 +3,14 @@
 //! outside press closes them. Menus let that press fall through to whatever
 //! is underneath (one click dismisses *and* selects); dialogs swallow it.
 
-use prism_doc::Doc;
+use prism_doc::{Doc, ObjectMode};
 use prism_math::{Rect, Vec2};
 use prism_ops::{Ctx, Executor, UiRequest, ViewInfo};
 use prism_props::Value;
 
-use crate::context_menu::{ContextMenu, Item, Width};
+use crate::context_menu::{ContextMenu, Item, Tint, Width};
 use crate::editors::{record_edit, run_op};
 use crate::event::Key;
-use crate::icons;
 use crate::state::CursorIcon;
 use crate::ui::{FILL, Sense, Ui};
 
@@ -442,17 +441,11 @@ fn draw_context(ui: &mut Ui, menu: &mut ContextMenu, window: Rect, host: &mut Ho
     let mut ty = strip.min.y;
     for (i, t) in menu.tools.iter().enumerate() {
         let rect = Rect::from_min_size(Vec2::new(strip.min.x, ty), Vec2::splat(strip_w));
-        let r = ui.interact(ui.id("tool").with_index(i), rect, Sense::CLICK);
-        if r.hovered {
-            ui.state.cursor_icon = CursorIcon::Pointer;
-        }
-        if t.active {
-            ui.raised(rect, ui.theme.accent, r.held);
-        } else {
-            ui.button_face(rect, &r);
-        }
-        let ink = if t.active { ui.theme.accent_text } else { ui.theme.text };
-        icons::draw(ui.draw, rect, t.icon, ink, m.px(2.0));
+        let lit = t.active.then(|| match t.tint {
+            Tint::Accent => (ui.theme.accent, ui.theme.accent_text),
+            Tint::Mode { edit } => (ui.theme.mode_color(edit), ui.theme.mode_text(edit)),
+        });
+        let r = ui.icon_button_in(ui.id("tool").with_index(i), rect, t.icon, lit);
         if r.clicked {
             host.run(&t.op, &t.overrides);
             out.refresh = true;
@@ -461,11 +454,12 @@ fn draw_context(ui: &mut Ui, menu: &mut ContextMenu, window: Rect, host: &mut Ho
         ty += strip_w + m.gap;
     }
 
-    // ---- panel underneath -----------------------------------------------------
+    // ---- panel underneath, outlined in the mode colour ---------------------------
+    let edit = host.doc.active_object().is_some_and(|o| o.mode == ObjectMode::Edit);
     ui.draw.set_layer(1);
     ui.floating_panel(panel_rect, ui.theme.header);
     let outline = m.px(2.0);
-    ui.draw.stroke_rect(panel_rect, outline, m.radius, ui.theme.accent);
+    ui.draw.stroke_rect(panel_rect, outline, m.radius, ui.theme.mode_color(edit));
     ui.draw.set_layer(saved_layer);
 
     ui.pop_id();

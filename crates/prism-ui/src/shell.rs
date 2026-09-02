@@ -9,7 +9,7 @@ use prism_ops::keymap::{CTX_MESH, CTX_OBJECT, CTX_WINDOW};
 use prism_ops::{Ctx, Executor, KeyConfig, UiRequest};
 use prism_render::DrawList;
 use prism_text::TextEngine;
-use prism_viewport::{PickRequest, ViewportRequest};
+use prism_viewport::{PickRequest, PickResult, ViewportRequest};
 
 use crate::context_menu::{ContextMenu, MenuContext};
 use crate::editors::{EditorCtx, EditorKind, GalleryState, OutlinerState, Prefs, PropertiesState, draw_editor, draw_editor_header, run_op, viewport};
@@ -306,13 +306,15 @@ impl Shell {
             ui.finish();
         }
 
-        // Focused area outline, on top of its content.
+        // Focused area outline, on top of its content, in the mode colour:
+        // blue in Object mode, gold in Edit mode.
+        let editing = doc.active_object().is_some_and(|o| o.mode == ObjectMode::Edit) && doc.object_mesh(doc.active_object_id()).is_some();
         if let Some(active) = self.screen.active
             && let Some(l) = self.screen.layout_of(active)
         {
             draw.set_layer(0);
             draw.push_clip_absolute(l.rect);
-            draw.stroke_rect(l.rect, m.focus_border, 0.0, theme.focus);
+            draw.stroke_rect(l.rect, m.focus_border, 0.0, theme.mode_color(editing));
             draw.pop_clip();
         }
 
@@ -324,11 +326,7 @@ impl Shell {
                 .active
                 .and_then(|a| self.screen.area(a))
                 .map_or("editor", |a| a.editor.keymap_context());
-            let mode_ctx = if doc.active_object().is_some_and(|o| o.mode == ObjectMode::Edit) && doc.object_mesh(doc.active_object_id()).is_some() {
-                CTX_MESH
-            } else {
-                CTX_OBJECT
-            };
+            let mode_ctx = if editing { CTX_MESH } else { CTX_OBJECT };
             let contexts = [editor_ctx, mode_ctx, CTX_WINDOW];
             let view = self.target_view();
             for k in leftover {
@@ -353,14 +351,25 @@ impl Shell {
 
         let quit = self.apply_requests(requests, doc);
 
-        // A tool in the context menu changed something it displays (shading,
-        // grid, select mode). Now that its request has been applied, rebuild
-        // the strip and title from live state; tabs keep their panels.
+        // A tool in the context menu changed something it displays. Now that
+        // its request has been applied, rebuild the strip and title from live
+        // state (tabs keep their panels) — or the whole menu, when the tool
+        // switched between Object and Edit mode and the menu's context is stale.
         let flags = self.view_flags_for(None);
         if refresh_menu && let Some(Popup::Context(menu)) = self.popup.as_mut() {
-            let fresh = ContextMenu::build(menu.context, doc, exec, menu.pos, flags);
-            menu.tools = fresh.tools;
-            menu.title = fresh.title;
+            let now_editing = doc.active_object().is_some_and(|o| o.mode == ObjectMode::Edit) && doc.object_mesh(doc.active_object_id()).is_some();
+            let menu_editing = matches!(menu.context, MenuContext::Mesh(_) | MenuContext::Element { .. });
+            if now_editing != menu_editing {
+                let context = match (now_editing, doc.active_object_id()) {
+                    (false, id) if doc.objects.contains(id) => MenuContext::Object(id),
+                    _ => ContextMenu::context_for(doc, PickResult::Nothing),
+                };
+                *menu = ContextMenu::build(context, doc, exec, menu.pos, flags);
+            } else {
+                let fresh = ContextMenu::build(menu.context, doc, exec, menu.pos, flags);
+                menu.tools = fresh.tools;
+                menu.title = fresh.title;
+            }
             self.state.request_rebuild = true;
         }
 

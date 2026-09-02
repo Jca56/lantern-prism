@@ -90,6 +90,17 @@ impl Theme {
         base.scale_rgb(1.0 - self.gradient * 3.5)
     }
 
+    /// The colour of the current mode: blue in Object mode, gold in Edit mode.
+    /// Borders (focused area, context menu) and the mode buttons wear it.
+    pub fn mode_color(&self, edit: bool) -> Color {
+        if edit { self.accent } else { self.focus }
+    }
+
+    /// Text or icon ink on top of [`Self::mode_color`].
+    pub fn mode_text(&self, edit: bool) -> Color {
+        if edit { self.accent_text } else { self.selection_text }
+    }
+
     /// A hovered control: a little brighter.
     pub fn hover(&self, base: Color) -> Color {
         base.scale_rgb(1.14)

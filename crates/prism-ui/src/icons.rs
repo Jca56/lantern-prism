@@ -3,6 +3,7 @@
 
 use prism_math::{Color, Rect, Vec2};
 use prism_render::DrawList;
+use prism_viewport::GizmoMode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
@@ -19,6 +20,17 @@ pub enum Icon {
     Move,
     Rotate,
     Scale,
+    /// Object mode: a cube as a whole.
+    Object,
+}
+
+/// The icon for a gizmo mode.
+pub fn gizmo_icon(g: GizmoMode) -> Icon {
+    match g {
+        GizmoMode::Move => Icon::Move,
+        GizmoMode::Rotate => Icon::Rotate,
+        GizmoMode::Scale => Icon::Scale,
+    }
 }
 
 pub fn draw(d: &mut DrawList, rect: Rect, icon: Icon, color: Color, stroke: f64) {
@@ -114,6 +126,18 @@ pub fn draw(d: &mut DrawList, rect: Rect, icon: Icon, color: Color, stroke: f64)
             d.line(p(-0.2, 0.2), p(0.9, -0.9), stroke, color);
             d.line(p(0.9, -0.9), p(0.1, -0.9), stroke, color);
             d.line(p(0.9, -0.9), p(0.9, -0.1), stroke, color);
+        }
+        Icon::Object => {
+            // A cube outline.
+            let f = Rect::from_center_size(p(-0.25, 0.25), Vec2::splat(s * 1.5));
+            let o = Vec2::new(s * 0.5, -s * 0.5);
+            d.stroke_rect(f, stroke, stroke, color);
+            let tr = Vec2::new(f.max.x, f.min.y);
+            d.line(f.min, f.min + o, stroke, color);
+            d.line(tr, tr + o, stroke, color);
+            d.line(f.max, f.max + o, stroke, color);
+            d.line(f.min + o, tr + o, stroke, color);
+            d.line(tr + o, f.max + o, stroke, color);
         }
         Icon::Camera => {
             let body = Rect::from_center_size(p(-0.2, 0.1), Vec2::new(s * 1.6, s * 1.1));

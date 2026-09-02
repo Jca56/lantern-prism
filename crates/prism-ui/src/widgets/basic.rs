@@ -1,7 +1,9 @@
 //! Labels, headings, buttons, toggles, tabs, separators.
 
-use prism_math::{Rect, Vec2};
+use prism_math::{Color, Rect, Vec2};
 
+use crate::icons::{self, Icon};
+use crate::id::WidgetId;
 use crate::state::CursorIcon;
 use crate::ui::{FILL, Response, Sense, Ui};
 
@@ -61,6 +63,36 @@ impl Ui<'_> {
         self.button_face(rect, &r);
         let style = self.text_style();
         self.text_centered(label, &style, rect, self.theme.text);
+        r
+    }
+
+    /// Square icon button the height of a widget; `active` lights it in the
+    /// accent.
+    pub fn icon_button(&mut self, label: &str, icon: Icon, active: bool) -> Response {
+        let id = self.id(label);
+        let rect = self.alloc(Vec2::splat(self.m.widget_h));
+        let lit = active.then_some((self.theme.accent, self.theme.accent_text));
+        self.icon_button_in(id, rect, icon, lit)
+    }
+
+    /// An icon button over a rect placed by the caller. `lit` is the
+    /// (face, ink) pair of an active button; `None` draws it as a plain button.
+    pub fn icon_button_in(&mut self, id: WidgetId, rect: Rect, icon: Icon, lit: Option<(Color, Color)>) -> Response {
+        let r = self.interact(id, rect, Sense::CLICK);
+        if r.hovered {
+            self.state.cursor_icon = CursorIcon::Pointer;
+        }
+        let ink = match lit {
+            Some((face, ink)) => {
+                self.raised(rect, face, r.held);
+                ink
+            }
+            None => {
+                self.button_face(rect, &r);
+                self.theme.text
+            }
+        };
+        icons::draw(self.draw, rect, icon, ink, self.m.px(2.0));
         r
     }
 

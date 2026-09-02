@@ -331,6 +331,14 @@ but nothing is *only* reachable by key.
 is one more door into the operator registry (D007), so it costs no new
 verbs, only a `MenuContext → ContextMenu` builder per situation.
 
+*Amended 2026-09-02 (Alva, later that day):* the strip holds **Object /
+Edit mode buttons** at the top (lit blue / gold — the mode colour also
+outlines the menu and the focused area), then select modes in edit mode,
+then the gizmo. Shading, grid and framing moved to the viewport **header**
+as the same icon buttons; the `+` tool went (the Add tab covers it);
+Dissolve and the normals actions moved to the Properties editor's
+**Mesh Tools** section.
+
 ## D024 — Transforms are pointer-driven modal operators; gizmo-driven, R cycles
 **Status:** Accepted (Alva, 2026-09-02: "just R that cycles between them")
 **Decision:** Move, Rotate and Scale are three modal operators
@@ -382,8 +390,9 @@ is a later toggle on the same path.
 
 ## Open questions
 - ~~Viewport interaction model~~ → D024 (gizmo-driven, R cycles the tool).
-  Navigation shipped in Phase 5: middle-drag orbit, Shift+middle pan, wheel
-  zoom, Alt+left orbit; presets and framing in the View menu.
+  Navigation (Alva, 2026-09-02): **left-drag orbits, Shift+drag pans,
+  Ctrl+drag box-selects** (Ctrl+Shift extends, Ctrl+Alt subtracts), wheel
+  zooms; a click still picks. Middle-drag orbit/pan stays as an alternative.
 - Widget look / palette for Prism: decided when there are pixels to look at.
   Known taste rules: sizes in multiples of 5, no glows, no help text, big.
 - Resolved 2026-09-01: keyboard focus (D017); text renderer source (D018).
