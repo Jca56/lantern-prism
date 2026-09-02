@@ -108,10 +108,12 @@ impl Shell {
     ) -> (Rect, Option<WindowCommand>) {
         let (bar, rest) = window.take_top(m.header_h);
         let mut cmd = None;
-        let bg = if ws.focused { theme.bg } else { theme.bg.lerp(theme.panel, 0.5) };
+        let bg = if ws.focused { theme.header } else { theme.header.lerp(theme.bg, 0.5) };
         draw.set_layer(0);
         draw.push_clip_absolute(bar);
-        draw.rect(bar, bg);
+        draw.rect_gradient(bar, theme.top(bg), theme.bottom(bg));
+        draw.hline(bar.min.x, bar.max.x, bar.min.y, m.border, theme.highlight(bg));
+        draw.hline(bar.min.x, bar.max.x, bar.max.y - m.border, m.border, theme.border_dark);
         draw.pop_clip();
 
         let mut ui = Ui::new(draw, text, theme, m, &mut self.state, bar, bar, WidgetId::ROOT.with("titlebar"), 0);
@@ -127,8 +129,9 @@ impl Shell {
             let resp = ui.interact(ui.id(name), r, Sense::CLICK);
             if resp.hovered {
                 ui.state.cursor_icon = CursorIcon::Pointer;
-                let hover = if kind == 2 { theme.close } else { theme.widget_hover };
-                ui.fill_square(r, if resp.held { theme.widget_active } else { hover });
+                let hover = if kind == 2 { theme.close } else { theme.hover(bg) };
+                let shown = if resp.held { theme.shade(hover) } else { hover };
+                ui.draw.rect_gradient(r, theme.top(shown), theme.bottom(shown));
             }
             let c = r.center();
             let s = m.px(6.0);
@@ -141,7 +144,7 @@ impl Shell {
                         let a = Rect::from_center_size(c + Vec2::new(-w, w), Vec2::splat(s * 1.6));
                         let b = Rect::from_center_size(c + Vec2::new(w, -w), Vec2::splat(s * 1.6));
                         ui.draw.stroke_rect(b, w, 0.0, ink);
-                        ui.draw.rect(a, if resp.hovered { theme.widget_hover } else { bg });
+                        ui.draw.rect(a, if resp.hovered { theme.hover(bg) } else { bg });
                         ui.draw.stroke_rect(a, w, 0.0, ink);
                     } else {
                         ui.draw.stroke_rect(Rect::from_center_size(c, Vec2::splat(s * 2.0)), w, 0.0, ink);

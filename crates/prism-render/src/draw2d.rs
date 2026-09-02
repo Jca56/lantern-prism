@@ -31,6 +31,7 @@ const MODE_FILL: f32 = 0.0;
 const MODE_GLYPH: f32 = 1.0;
 const MODE_STROKE: f32 = 2.0;
 const MODE_PLAIN: f32 = 3.0;
+const MODE_SHADOW: f32 = 4.0;
 
 /// "No clip": anything on screen passes.
 const OPEN_CLIP: [f32; 4] = [-1.0e6, -1.0e6, 1.0e6, 1.0e6];
@@ -111,8 +112,13 @@ impl DrawList {
     }
 
     fn push_quad(&mut self, corners: [Vec2; 4], uvs: [[f32; 2]; 4], color: [f32; 4], rect: [f32; 4], params: [f32; 4]) {
+        self.push_quad_colors(corners, uvs, [color; 4], rect, params);
+    }
+
+    /// Corners are TL, TR, BR, BL, each with its own color (linear).
+    fn push_quad_colors(&mut self, corners: [Vec2; 4], uvs: [[f32; 2]; 4], colors: [[f32; 4]; 4], rect: [f32; 4], params: [f32; 4]) {
         let clip = self.clip4();
-        let v = |i: usize| Vertex2d { pos: corners[i].to_gpu(), uv: uvs[i], color, rect, params, clip };
+        let v = |i: usize| Vertex2d { pos: corners[i].to_gpu(), uv: uvs[i], color: colors[i], rect, params, clip };
         // Corners are TL, TR, BR, BL. Two triangles: (TL, BL, BR) + (TL, BR, TR).
         let out = &mut self.layers[self.layer];
         out.extend_from_slice(&[v(0), v(3), v(2), v(0), v(2), v(1)]);
@@ -134,9 +140,51 @@ impl DrawList {
         );
     }
 
+    fn gradient_quad(&mut self, r: Rect, top: Color, bottom: Color, params: [f32; 4]) {
+        if r.is_empty() || (top.a <= 0.0 && bottom.a <= 0.0) {
+            return;
+        }
+        let c = r.center();
+        let h = r.size() * 0.5;
+        let corners = [r.min, Vec2::new(r.max.x, r.min.y), r.max, Vec2::new(r.min.x, r.max.y)];
+        let t = top.to_linear().to_gpu();
+        let b = bottom.to_linear().to_gpu();
+        self.push_quad_colors(corners, [[0.0; 2]; 4], [t, t, b, b], [c.x as f32, c.y as f32, h.x as f32, h.y as f32], params);
+    }
+
     /// Axis-aligned filled rectangle with hard edges.
     pub fn rect(&mut self, r: Rect, color: Color) {
         self.rect_quad(r, color, [0.0, MODE_PLAIN, 0.0, 0.0]);
+    }
+
+    /// Hard-edged rectangle shaded from `top` to `bottom`.
+    pub fn rect_gradient(&mut self, r: Rect, top: Color, bottom: Color) {
+        self.gradient_quad(r, top, bottom, [0.0, MODE_PLAIN, 0.0, 0.0]);
+    }
+
+    /// Rounded rectangle shaded from `top` to `bottom`.
+    pub fn rounded_rect_gradient(&mut self, r: Rect, radius: f64, top: Color, bottom: Color) {
+        let radius = radius.min(r.width() * 0.5).min(r.height() * 0.5).max(0.0);
+        self.gradient_quad(r, top, bottom, [radius as f32, MODE_FILL, 0.0, 0.0]);
+    }
+
+    /// Soft shadow fading out over `blur` pixels beyond the rounded rect.
+    pub fn shadow(&mut self, r: Rect, radius: f64, blur: f64, color: Color) {
+        if r.is_empty() || color.a <= 0.0 {
+            return;
+        }
+        let radius = radius.min(r.width() * 0.5).min(r.height() * 0.5).max(0.0);
+        let c = r.center();
+        let h = r.size() * 0.5;
+        let q = r.expand(blur);
+        let corners = [q.min, Vec2::new(q.max.x, q.min.y), q.max, Vec2::new(q.min.x, q.max.y)];
+        self.push_quad(
+            corners,
+            [[0.0; 2]; 4],
+            color.to_linear().to_gpu(),
+            [c.x as f32, c.y as f32, h.x as f32, h.y as f32],
+            [radius as f32, MODE_SHADOW, blur as f32, 0.0],
+        );
     }
 
     /// Filled rectangle with anti-aliased rounded corners.
@@ -259,6 +307,22 @@ mod tests {
         assert_eq!(g.pos, [4.0, 2.0]);
         assert_eq!(g.uv, [13.0, 20.0]);
         assert_eq!(g.color[3], 0.5);
+    }
+
+    #[test]
+    fn gradients_and_shadows() {
+        let mut d = DrawList::new();
+        d.rounded_rect_gradient(Rect::from_xywh(0.0, 0.0, 10.0, 10.0), 2.0, Color::WHITE, Color::BLACK);
+        let v: Vec<_> = d.vertices().collect();
+        assert_eq!(v[0].color, [1.0, 1.0, 1.0, 1.0], "top-left is the top color");
+        assert_eq!(v[2].color, [0.0, 0.0, 0.0, 1.0], "bottom-right is the bottom color");
+        assert_eq!(v[0].params[1], MODE_FILL);
+        d.shadow(Rect::from_xywh(10.0, 10.0, 10.0, 10.0), 3.0, 4.0, Color::BLACK);
+        let last = *d.vertices().last().unwrap();
+        assert_eq!(last.params[1], MODE_SHADOW);
+        assert_eq!(last.params[2], 4.0);
+        assert_eq!(last.pos, [24.0, 6.0], "quad grows by the blur");
+        assert_eq!(last.rect, [15.0, 15.0, 5.0, 5.0], "SDF rect stays the original");
     }
 
     #[test]

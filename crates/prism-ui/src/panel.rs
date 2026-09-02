@@ -21,8 +21,9 @@ impl Ui<'_> {
             *self.state.open(id) = !open;
         }
         let open = *self.state.open(id);
-        let bg = self.widget_color(&r);
-        self.fill(rect, bg);
+        let base = if r.hovered { self.theme.hover(self.theme.header) } else { self.theme.header };
+        self.fill_shaded(rect, base);
+        self.draw.hline(rect.min.x, rect.max.x, rect.max.y - self.m.border, self.m.border, self.theme.border_dark);
         // Disclosure triangle.
         let s = self.m.px(6.0);
         let c = Vec2::new(rect.min.x + self.m.pad + s, rect.center().y);
@@ -211,7 +212,7 @@ impl Ui<'_> {
                 self.row(|ui| {
                     let sw = ui.alloc(Vec2::new(ui.m.widget_h, ui.m.widget_h));
                     ui.fill(sw, *c);
-                    ui.outline(sw, ui.m.border, ui.theme.border);
+                    ui.outline(sw, ui.m.border, ui.theme.border_dark);
                     for (k, name) in ["R", "G", "B", "A"].iter().enumerate() {
                         ui.push_index(k);
                         changed |= ui.drag_value(name, &mut a[k], 0.005, Some((0.0, 1.0)), 2);

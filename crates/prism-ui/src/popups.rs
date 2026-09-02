@@ -102,9 +102,10 @@ pub fn draw(ui: &mut Ui, popup: &mut Popup, window: Rect, palette_entries: &[(St
     ui.draw.set_layer(layer);
     ui.set_layer_internal(layer);
     ui.set_clip(rect);
+    ui.draw.push_clip_absolute(rect.expand(m.px(20.0)));
+    ui.floating_panel(rect, ui.theme.header);
+    ui.draw.pop_clip();
     ui.draw.push_clip_absolute(rect);
-    ui.fill(rect, ui.theme.header);
-    ui.outline(rect, m.border, ui.theme.border);
     ui.push_id("popup");
     let content = rect.shrink(m.gap);
     ui.set_cursor(content.min);
@@ -156,12 +157,12 @@ pub fn draw(ui: &mut Ui, popup: &mut Popup, window: Rect, palette_entries: &[(St
                 let style = ui.text_style();
                 let inner = Rect::new(Vec2::new(rect.min.x + m.pad, rect.min.y), Vec2::new(rect.max.x - m.pad, rect.max.y));
                 if i == *selected {
-                    ui.fill(rect, ui.theme.accent);
-                    ui.text_in_rect(label, &style, inner, ui.theme.accent_text);
-                    ui.text_right(id, &style, inner, ui.theme.accent_text);
+                    ui.fill_shaded(rect, ui.theme.selection);
+                    ui.text_in_rect(label, &style, inner, ui.theme.selection_text);
+                    ui.text_right(id, &style, inner, ui.theme.selection_text);
                 } else {
                     if rr.hovered {
-                        let bg = ui.widget_color(&rr);
+                        let bg = ui.theme.hover(ui.theme.header);
                         ui.fill(rect, bg);
                     }
                     ui.text_in_rect(label, &style, inner, ui.theme.text);

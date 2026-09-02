@@ -58,8 +58,7 @@ impl Ui<'_> {
         if r.hovered {
             self.state.cursor_icon = CursorIcon::Pointer;
         }
-        let bg = self.widget_color(&r);
-        self.fill(rect, bg);
+        self.button_face(rect, &r);
         let style = self.text_style();
         self.text_centered(label, &style, rect, self.theme.text);
         r
@@ -83,11 +82,18 @@ impl Ui<'_> {
             Vec2::new(rect.min.x + box_size * 0.5, rect.center().y),
             Vec2::splat(box_size),
         );
-        let bg = self.widget_color(&r);
-        self.fill(bx, bg);
+        let well = if r.hovered { self.theme.hover(self.theme.field) } else { self.theme.field };
+        self.recessed(bx, well);
         if *value {
-            let inner = bx.shrink(self.m.px(6.0));
-            self.draw.rounded_rect(inner, self.m.radius * 0.5, self.theme.accent);
+            let inner = bx.shrink(self.m.px(4.0));
+            self.fill_shaded(inner, self.theme.accent);
+            // Check mark.
+            let w = self.m.px(3.0);
+            let (x0, y0) = (inner.min.x, inner.min.y);
+            let s = inner.width();
+            let c = self.theme.accent_text;
+            self.draw.line(Vec2::new(x0 + s * 0.22, y0 + s * 0.52), Vec2::new(x0 + s * 0.42, y0 + s * 0.74), w, c);
+            self.draw.line(Vec2::new(x0 + s * 0.40, y0 + s * 0.74), Vec2::new(x0 + s * 0.80, y0 + s * 0.28), w, c);
         }
         let text_rect = Rect::new(Vec2::new(bx.max.x + self.m.gap, rect.min.y), rect.max);
         self.text_in_rect(label, &style, text_rect, self.theme.text);
@@ -104,11 +110,11 @@ impl Ui<'_> {
         }
         let style = self.text_style();
         if selected {
-            self.fill(rect, self.theme.accent);
-            self.text_in_rect_padded(label, &style, rect, self.theme.accent_text);
+            self.fill_shaded(rect, self.theme.selection);
+            self.text_in_rect_padded(label, &style, rect, self.theme.selection_text);
         } else {
             if r.hovered || r.held {
-                let bg = self.widget_color(&r);
+                let bg = self.theme.hover(self.theme.panel);
                 self.fill(rect, bg);
             }
             self.text_in_rect_padded(label, &style, rect, self.theme.text);
@@ -143,11 +149,10 @@ impl Ui<'_> {
                 self.state.cursor_icon = CursorIcon::Pointer;
             }
             if *selected == i {
-                self.fill(tr, self.theme.accent);
+                self.raised(tr, self.theme.accent, false);
                 self.text_centered(label, &style, tr, self.theme.accent_text);
             } else {
-                let bg = self.widget_color(&r);
-                self.fill(tr, bg);
+                self.button_face(tr, &r);
                 self.text_centered(label, &style, tr, self.theme.text);
             }
         }
@@ -156,8 +161,8 @@ impl Ui<'_> {
 
     /// Thin horizontal rule with breathing room.
     pub fn separator(&mut self) {
-        let r = self.alloc(Vec2::new(FILL, self.m.gap * 2.0 + self.m.border));
-        let y = (r.center().y - self.m.border * 0.5).round();
-        self.hline(y, r.min.x, r.max.x, self.theme.border);
+        let r = self.alloc(Vec2::new(FILL, self.m.gap * 2.0 + self.m.border * 2.0));
+        let y = (r.center().y - self.m.border).round();
+        self.etched_line(r.min.x, r.max.x, y);
     }
 }

@@ -1,6 +1,11 @@
 //! Theme: colors and logical sizes, described with `props!` so the
 //! Preferences editor edits it live. Sizes are logical pixels in multiples of
 //! five; [`Metrics`] is the theme scaled to physical pixels for one frame.
+//!
+//! The look: charcoal panels with a little vertical gradient, raised
+//! controls (light top edge, dark bottom edge), recessed fields, an amber
+//! accent for "on", blue for selection, and a color per object kind.
+//! `gradient` is the depth knob; zero is flat.
 
 use prism_math::Color;
 use prism_props::props;
@@ -8,47 +13,95 @@ use prism_props::props;
 props! {
     /// Colors and sizes of the editor UI.
     pub struct Theme {
-        /// Window background, visible between areas.
-        pub bg: Color = Color::hex(0x141414) => { id: 1 },
-        /// Area header bars.
-        pub header: Color = Color::hex(0x1E1E1E) => { id: 2 },
+        /// Window background, title bar, gaps between areas.
+        pub bg: Color = Color::hex(0x19191B) => { id: 1 },
+        /// Area header bars (shaded by `gradient`).
+        pub header: Color = Color::hex(0x38383B) => { id: 2 },
         /// Area bodies.
-        pub panel: Color = Color::hex(0x202020) => { id: 3 },
-        /// Hairlines and outlines.
-        pub border: Color = Color::hex(0x303030) => { id: 4 },
-        pub text: Color = Color::hex(0xE6E6E6) => { id: 5 },
-        pub text_dim: Color = Color::hex(0x909090) => { id: 6 },
-        /// Buttons, fields, sliders at rest.
-        pub widget: Color = Color::hex(0x2A2A2A) => { id: 7 },
-        pub widget_hover: Color = Color::hex(0x353535) => { id: 8 },
-        pub widget_active: Color = Color::hex(0x404040) => { id: 9 },
-        /// Filled part of sliders, checked toggles, selected items.
-        pub accent: Color = Color::hex(0xC8C8C8) => { id: 10 },
-        /// Text drawn on top of `accent`.
-        pub accent_text: Color = Color::hex(0x141414) => { id: 11 },
-        /// Text selection background.
-        pub selection: Color = Color::hex(0x4A4A4A) => { id: 12 },
-        /// Border of the area that has keyboard focus.
-        pub focus: Color = Color::hex(0xC8C8C8) => { id: 13 },
+        pub panel: Color = Color::hex(0x27272A) => { id: 3 },
+        /// Raised controls: buttons, tabs, thumbs.
+        pub widget: Color = Color::hex(0x47474B) => { id: 4 },
+        /// Recessed controls: fields, sliders tracks, the viewport well.
+        pub field: Color = Color::hex(0x1D1D1F) => { id: 5 },
+        pub text: Color = Color::hex(0xEDEDED) => { id: 6 },
+        pub text_dim: Color = Color::hex(0x9A9A9F) => { id: 7 },
+        /// "On": active tabs, checked toggles, slider fill.
+        pub accent: Color = Color::hex(0xE3A72F) => { id: 8 },
+        /// Text on top of `accent`.
+        pub accent_text: Color = Color::hex(0x1A1508) => { id: 9 },
+        /// Selected rows and items.
+        pub selection: Color = Color::hex(0x3E6EB4) => { id: 10 },
+        pub selection_text: Color = Color::hex(0xFFFFFF) => { id: 11 },
+        /// Outline of the focused area and focused field.
+        pub focus: Color = Color::hex(0x5B8FE3) => { id: 12 },
         /// The close button while hovered.
-        pub close: Color = Color::hex(0xB03A3A) => { id: 14 },
+        pub close: Color = Color::hex(0xC0392B) => { id: 13 },
+        /// Dark lines: panel edges, control outlines.
+        pub border_dark: Color = Color::hex(0x0F0F11) => { id: 14 },
+        /// Light lines: bevels, etched separators.
+        pub border_light: Color = Color::hex(0x5C5C61) => { id: 15 },
+        /// Object kind colors (outliner strips, later viewport tints).
+        pub mesh_color: Color = Color::hex(0xE58A2E) => { id: 16 },
+        pub light_color: Color = Color::hex(0xE8C547) => { id: 17 },
+        pub camera_color: Color = Color::hex(0x4C8BD6) => { id: 18 },
+        pub empty_color: Color = Color::hex(0x9A9A9F) => { id: 19 },
+        /// Strength of the vertical shading on headers and controls. 0 = flat.
+        pub gradient: f64 = 0.12 => { id: 20, hard: 0.0..=0.4, subtype: Factor },
 
         /// Body text size.
-        pub text_size: f64 = 25.0 => { id: 20, hard: 10.0..=80.0, step: 5.0, subtype: Pixels },
-        pub heading_size: f64 = 30.0 => { id: 21, hard: 10.0..=100.0, step: 5.0, subtype: Pixels },
-        pub header_height: f64 = 45.0 => { id: 22, hard: 20.0..=120.0, step: 5.0, subtype: Pixels },
+        pub text_size: f64 = 25.0 => { id: 30, hard: 10.0..=80.0, step: 5.0, subtype: Pixels },
+        pub heading_size: f64 = 30.0 => { id: 31, hard: 10.0..=100.0, step: 5.0, subtype: Pixels },
+        pub header_height: f64 = 45.0 => { id: 32, hard: 20.0..=120.0, step: 5.0, subtype: Pixels },
         /// Height of buttons, fields, sliders.
-        pub widget_height: f64 = 45.0 => { id: 23, hard: 20.0..=120.0, step: 5.0, subtype: Pixels },
+        pub widget_height: f64 = 45.0 => { id: 33, hard: 20.0..=120.0, step: 5.0, subtype: Pixels },
         /// Inner padding of widgets and panels.
-        pub padding: f64 = 10.0 => { id: 24, hard: 0.0..=40.0, step: 5.0, subtype: Pixels },
+        pub padding: f64 = 10.0 => { id: 34, hard: 0.0..=40.0, step: 5.0, subtype: Pixels },
         /// Space between widgets.
-        pub gap: f64 = 5.0 => { id: 25, hard: 0.0..=40.0, step: 5.0, subtype: Pixels },
-        pub radius: f64 = 5.0 => { id: 26, hard: 0.0..=30.0, step: 5.0, subtype: Pixels },
+        pub gap: f64 = 5.0 => { id: 35, hard: 0.0..=40.0, step: 5.0, subtype: Pixels },
+        pub radius: f64 = 5.0 => { id: 36, hard: 0.0..=30.0, step: 5.0, subtype: Pixels },
         /// Width of the label column in property panels.
-        pub label_width: f64 = 200.0 => { id: 27, hard: 50.0..=500.0, step: 10.0, subtype: Pixels },
-        pub scrollbar_width: f64 = 15.0 => { id: 28, hard: 5.0..=40.0, step: 5.0, subtype: Pixels },
+        pub label_width: f64 = 200.0 => { id: 37, hard: 50.0..=500.0, step: 10.0, subtype: Pixels },
+        pub scrollbar_width: f64 = 15.0 => { id: 38, hard: 5.0..=40.0, step: 5.0, subtype: Pixels },
         /// Gap between areas; also the drag handle.
-        pub separator: f64 = 5.0 => { id: 29, hard: 0.0..=20.0, step: 5.0, subtype: Pixels },
+        pub separator: f64 = 5.0 => { id: 39, hard: 0.0..=20.0, step: 5.0, subtype: Pixels },
+    }
+}
+
+impl Theme {
+    /// Lighter end of a shaded control.
+    pub fn top(&self, base: Color) -> Color {
+        base.scale_rgb(1.0 + self.gradient)
+    }
+
+    /// Darker end of a shaded control.
+    pub fn bottom(&self, base: Color) -> Color {
+        base.scale_rgb(1.0 - self.gradient)
+    }
+
+    /// The bright edge along the top of a raised control.
+    pub fn highlight(&self, base: Color) -> Color {
+        base.scale_rgb(1.0 + self.gradient * 3.0)
+    }
+
+    /// The dark edge along the bottom of a raised control (and the inner
+    /// shadow at the top of a recessed one).
+    pub fn shade(&self, base: Color) -> Color {
+        base.scale_rgb(1.0 - self.gradient * 3.5)
+    }
+
+    /// A hovered control: a little brighter.
+    pub fn hover(&self, base: Color) -> Color {
+        base.scale_rgb(1.14)
+    }
+
+    /// Kind color for an object.
+    pub fn kind_color(&self, kind: prism_doc::DataKind) -> Color {
+        match kind {
+            prism_doc::DataKind::Mesh => self.mesh_color,
+            prism_doc::DataKind::Light => self.light_color,
+            prism_doc::DataKind::Camera => self.camera_color,
+            prism_doc::DataKind::Empty => self.empty_color,
+        }
     }
 }
 
@@ -123,10 +176,15 @@ mod tests {
     }
 
     #[test]
-    fn theme_is_reflected() {
+    fn theme_is_reflected_and_shades() {
         let info = Theme::info();
-        assert_eq!(info.field("accent").unwrap().id, 10);
+        assert_eq!(info.field("accent").unwrap().id, 8);
         assert!(info.field("text_size").unwrap().hard.is_some());
-        assert_eq!(info.fields.len(), 24);
+        assert_eq!(info.fields.len(), 30);
+        let t = Theme::default();
+        assert!(t.top(t.widget).r > t.widget.r && t.bottom(t.widget).r < t.widget.r);
+        assert!(t.highlight(t.widget).r > t.top(t.widget).r);
+        let flat = Theme { gradient: 0.0, ..Theme::default() };
+        assert_eq!(flat.top(flat.widget), flat.widget);
     }
 }

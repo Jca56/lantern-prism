@@ -30,15 +30,18 @@ impl Ui<'_> {
         if r.hovered {
             self.state.cursor_icon = CursorIcon::Pointer;
         }
-        let bg = self.widget_color(&r);
-        self.fill(rect, bg);
+        let open = *self.state.open(id);
+        let well = if r.hovered || open { self.theme.hover(self.theme.field) } else { self.theme.field };
+        self.recessed(rect, well);
+        if open {
+            self.outline(rect, self.m.border, self.theme.focus);
+        }
         let style = self.text_style();
         let inner = Rect::new(Vec2::new(rect.min.x + self.m.pad, rect.min.y), Vec2::new(rect.max.x - self.m.pad, rect.max.y));
         let current = options.get(*selected).copied().unwrap_or("");
         self.text_in_rect(current, &style, inner, self.theme.text);
         self.draw_chevron(rect);
 
-        let open = *self.state.open(id);
         if r.clicked {
             *self.state.open(id) = !open;
             self.state.request_rebuild = true;
@@ -69,8 +72,8 @@ impl Ui<'_> {
             self.state.cursor_icon = CursorIcon::Pointer;
         }
         let open_now = *self.state.open(id);
-        let bg = if open_now { self.theme.widget_active } else { self.widget_color(&r) };
-        self.fill(rect, bg);
+        let base = self.widget_color(&r);
+        self.raised(rect, base, open_now || r.held);
         self.text_centered(label, &style, rect, self.theme.text);
         if r.clicked {
             *self.state.open(id) = !open_now;
@@ -126,9 +129,10 @@ impl Ui<'_> {
         self.draw.set_layer(layer);
         self.set_layer_internal(layer);
         self.set_clip(rect);
+        self.draw.push_clip_absolute(rect.expand(self.m.px(20.0)));
+        self.floating_panel(rect, self.theme.header);
+        self.draw.pop_clip();
         self.draw.push_clip_absolute(rect);
-        self.fill(rect, self.theme.header);
-        self.outline(rect, self.m.border, self.theme.border);
         let mut y = rect.min.y + self.m.gap;
         for (i, item) in items.iter().enumerate() {
             let ir = Rect::from_min_size(Vec2::new(rect.min.x, y), Vec2::new(w, item_h));
@@ -139,8 +143,8 @@ impl Ui<'_> {
             }
             let is_sel = selected == Some(i);
             if r.hovered || r.held {
-                let bg = self.widget_color(&r);
-                self.fill_square(ir, bg);
+                let bg = self.theme.hover(self.theme.header);
+                self.fill(ir.shrink(self.m.border), bg);
             }
             let inner = Rect::new(Vec2::new(ir.min.x + self.m.pad, ir.min.y), Vec2::new(ir.max.x - self.m.pad, ir.max.y));
             let color = if is_sel { self.theme.accent } else { self.theme.text };

@@ -77,13 +77,18 @@ pub fn draw(ui: &mut Ui, ctx: &mut EditorCtx) {
                 }
                 let style = ui.text_style();
                 if obj.selected {
-                    ui.fill(rect, ui.theme.accent);
+                    ui.fill_shaded(rect, ui.theme.selection);
                 } else if r.hovered {
-                    let bg = ui.widget_color(&r);
+                    let bg = ui.theme.hover(ui.theme.panel);
                     ui.fill(rect, bg);
                 }
-                let (fg, dim) = if obj.selected { (ui.theme.accent_text, ui.theme.accent_text) } else { (ui.theme.text, ui.theme.text_dim) };
-                let inner = Rect::new(Vec2::new(rect.min.x + ui.m.pad, rect.min.y), Vec2::new(rect.max.x - ui.m.pad, rect.max.y));
+                // Kind color strip, like a track color.
+                let strip_w = ui.m.px(6.0);
+                let strip = Rect::new(rect.min + Vec2::new(ui.m.border, ui.m.border), Vec2::new(rect.min.x + strip_w, rect.max.y - ui.m.border));
+                let kind_color = ui.theme.kind_color(obj.kind);
+                ui.draw.rounded_rect(strip, strip_w * 0.5, kind_color);
+                let (fg, dim) = if obj.selected { (ui.theme.selection_text, ui.theme.selection_text) } else { (ui.theme.text, ui.theme.text_dim) };
+                let inner = Rect::new(Vec2::new(rect.min.x + strip_w + ui.m.pad, rect.min.y), Vec2::new(rect.max.x - ui.m.pad, rect.max.y));
                 ui.text_in_rect(&obj.name, &style, inner, fg);
                 let mode = if obj.mode == prism_doc::ObjectMode::Edit { " · Edit" } else { "" };
                 ui.text_right(&format!("{}{mode}", kind_label(obj.kind)), &style, inner, dim);

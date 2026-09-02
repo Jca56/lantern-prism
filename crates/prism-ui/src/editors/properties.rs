@@ -126,11 +126,11 @@ fn history_tab(ui: &mut Ui, ctx: &mut EditorCtx) {
     let r = ui.interact(ui.id("origin"), rect, Sense::CLICK);
     let style = ui.text_style();
     if cursor == 0 {
-        ui.fill(rect, ui.theme.accent);
-        ui.text_in_rect("  Original", &style, rect, ui.theme.accent_text);
+        ui.fill_shaded(rect, ui.theme.selection);
+        ui.text_in_rect("  Original", &style, rect, ui.theme.selection_text);
     } else {
         if r.hovered {
-            let bg = ui.widget_color(&r);
+            let bg = ui.theme.hover(ui.theme.panel);
             ui.fill(rect, bg);
         }
         ui.text_in_rect("  Original", &style, rect, ui.theme.text_dim);
@@ -147,11 +147,11 @@ fn history_tab(ui: &mut Ui, ctx: &mut EditorCtx) {
         }
         let applied = i < cursor;
         if i + 1 == cursor {
-            ui.fill(rect, ui.theme.accent);
-            ui.text_in_rect(&format!("  {label}"), &style, rect, ui.theme.accent_text);
+            ui.fill_shaded(rect, ui.theme.selection);
+            ui.text_in_rect(&format!("  {label}"), &style, rect, ui.theme.selection_text);
         } else {
             if r.hovered {
-                let bg = ui.widget_color(&r);
+                let bg = ui.theme.hover(ui.theme.panel);
                 ui.fill(rect, bg);
             }
             ui.text_in_rect(&format!("  {label}"), &style, rect, if applied { ui.theme.text } else { ui.theme.text_dim });

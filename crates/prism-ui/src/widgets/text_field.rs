@@ -193,8 +193,8 @@ impl Ui<'_> {
         }
 
         // Draw.
-        let bg = if r.focused { self.theme.widget_active } else { self.widget_color(&r) };
-        self.fill(rect, bg);
+        let well = if r.focused || r.hovered { self.theme.hover(self.theme.field) } else { self.theme.field };
+        self.recessed(rect, well);
         if r.focused {
             self.outline(rect, self.m.border, self.theme.focus);
         }

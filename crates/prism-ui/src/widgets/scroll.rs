@@ -42,10 +42,12 @@ impl Ui<'_> {
             if r.dragging && travel > 0.0 && !r.pressed {
                 offset = (offset + r.drag_delta.y / travel * max_off).clamp(0.0, max_off);
             }
-            self.fill_square(track, self.theme.widget);
+            self.draw.rounded_rect(track, bar_w * 0.5, self.theme.field);
             let thumb = Rect::from_min_size(Vec2::new(track.min.x, track.min.y + travel * (offset / max_off)), Vec2::new(bar_w, thumb_h));
-            let c = if r.held { self.theme.accent } else if r.hovered { self.theme.text_dim } else { self.theme.border };
-            self.draw.rounded_rect(thumb, bar_w * 0.5, c);
+            let base = if r.held { self.theme.accent } else if r.hovered { self.theme.hover(self.theme.widget) } else { self.theme.widget };
+            let (t, b) = (self.theme.top(base), self.theme.bottom(base));
+            self.draw.rounded_rect_gradient(thumb.shrink(self.m.border), bar_w * 0.5, t, b);
+            self.draw.stroke_rect(thumb, self.m.border, bar_w * 0.5, self.theme.border_dark);
         }
 
         // Lay out the content shifted by the offset, clipped to the viewport.

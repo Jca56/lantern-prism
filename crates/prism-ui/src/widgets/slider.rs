@@ -45,13 +45,13 @@ impl Ui<'_> {
                 changed = true;
             }
         }
-        let bg = self.widget_color(&r);
-        self.fill(rect, bg);
+        let well = if r.hovered || r.held { self.theme.hover(self.theme.field) } else { self.theme.field };
+        self.recessed(rect, well);
         let t = if max > min { ((*value - min) / (max - min)).clamp(0.0, 1.0) } else { 0.0 };
         let filled = Rect::new(rect.min, Vec2::new(rect.min.x + rect.width() * t, rect.max.y));
         if filled.width() >= 1.0 {
             self.draw.push_clip(filled);
-            self.fill(rect, self.theme.accent);
+            self.fill_shaded(rect.shrink(self.m.border), self.theme.accent);
             self.draw.pop_clip();
         }
         let style = self.text_style();
@@ -107,8 +107,8 @@ impl Ui<'_> {
             self.begin_number_edit(id, *value);
             self.state.request_rebuild = true;
         }
-        let bg = self.widget_color(&r);
-        self.fill(rect, bg);
+        let well = if r.hovered || r.held { self.theme.hover(self.theme.field) } else { self.theme.field };
+        self.recessed(rect, well);
         let style = self.text_style();
         let inner = rect.shrink(self.m.pad).expand_y(self.m.pad);
         if !label.is_empty() {

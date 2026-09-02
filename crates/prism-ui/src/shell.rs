@@ -228,9 +228,11 @@ impl Shell {
 
             draw.set_layer(0);
             draw.push_clip_absolute(l.rect);
-            draw.rect(l.header, theme.header);
-            draw.hline(l.header.min.x, l.header.max.x, l.header.max.y - m.border, m.border, theme.border);
+            draw.rect_gradient(l.header, theme.top(theme.header), theme.bottom(theme.header));
+            draw.hline(l.header.min.x, l.header.max.x, l.header.min.y, m.border, theme.highlight(theme.header));
+            draw.hline(l.header.min.x, l.header.max.x, l.header.max.y - m.border, m.border, theme.border_dark);
             draw.rect(l.body, theme.panel);
+            draw.stroke_rect(l.rect, m.border, 0.0, theme.border_dark);
             draw.pop_clip();
 
             let content = Rect::new(

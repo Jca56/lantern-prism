@@ -19,6 +19,7 @@ const MODE_FILL: f32 = 0.0;   // SDF rounded rect, filled
 const MODE_GLYPH: f32 = 1.0;  // textured from the atlas
 const MODE_STROKE: f32 = 2.0; // SDF rounded rect, inner stroke of width params.z
 const MODE_PLAIN: f32 = 3.0;  // hard-edged quad, no SDF
+const MODE_SHADOW: f32 = 4.0; // soft falloff outside the rect over params.z pixels
 
 struct VsIn {
     @location(0) pos: vec2<f32>,
@@ -84,6 +85,13 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
 
     var alpha = color.a;
+    if mode == MODE_SHADOW {
+        let d = sd_round_box(p - in.rect.xy, in.rect.zw, in.params.x);
+        let blur = max(in.params.z, 1.0);
+        let t = clamp(1.0 - (d + blur) / (2.0 * blur), 0.0, 1.0);
+        alpha = alpha * t * t;
+        return vec4<f32>(color.rgb * alpha, alpha);
+    }
     if mode == MODE_FILL || mode == MODE_STROKE {
         let d = sd_round_box(p - in.rect.xy, in.rect.zw, in.params.x);
         var sd = d;
