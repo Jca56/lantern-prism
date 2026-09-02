@@ -3,6 +3,7 @@
 pub mod extrude;
 pub mod inset;
 pub mod io;
+pub mod loop_cut;
 pub mod mesh;
 pub mod object;
 pub mod select;
@@ -19,6 +20,7 @@ pub fn register_all(r: &mut Registry) {
     mesh::register(r);
     extrude::register(r);
     inset::register(r);
+    loop_cut::register(r);
     transform::register(r);
     view3d::register(r);
 }

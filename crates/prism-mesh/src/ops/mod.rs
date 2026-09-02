@@ -6,8 +6,10 @@ mod delete;
 mod dissolve;
 mod extrude;
 mod inset;
+mod loop_cut;
 mod normals;
 mod weld;
 
 pub use extrude::ExtrudeResult;
 pub use inset::{InsetResult, InsetVert};
+pub use loop_cut::{CutVert, LoopCutResult, Ring};

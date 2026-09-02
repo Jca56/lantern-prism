@@ -418,6 +418,22 @@ Adjust Last Operation.
 Reusing the region extrude means one boundary walk and one attribute-copy
 path to keep correct.
 
+## D028 — Loop cut walks the quad ring from the active edge
+**Status:** Accepted (implemented 2026-09-02; Phase 7 slice 3)
+**Decision:** `Mesh::edge_ring` steps from an edge across each quad to its
+opposite edge, both ways, keeping every edge oriented so one side's
+vertices stay on one side of the strip; it stops at a non-quad, a boundary,
+or where the ring would cross itself, and reports when it closes into a
+belt. `Mesh::loop_cut` cuts every ring edge (`subdivide_edges`) and connects
+the matching cuts across each quad (`connect_verts`); a single cut slides.
+`mesh.loop_cut` seeds from the **active edge** (the one right-clicked, or the
+first selected edge), so there is no hover preview yet; the modal slide sets
+the factor from where the pointer sits along the seed edge on screen, click
+confirms, and cuts / factor live in Adjust Last Operation.
+**Why:** Loop cut is how detail gets added where it is needed. Seeding from
+the right-clicked edge fits D023 and avoids per-frame hover picking; a
+hover preview can come later on the same ring walk.
+
 ---
 
 ## Open questions
