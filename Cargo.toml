@@ -4,6 +4,9 @@ members = [
     "crates/prism-math",
     "crates/prism-core",
     "crates/prism-props",
+    "crates/prism-geom",
+    "crates/prism-mesh",
+    "crates/prism-eval",
     "crates/prism-text",
     "crates/prism-render",
     "crates/prism-ui",
@@ -20,6 +23,9 @@ authors = ["Alva"]
 prism-math = { path = "crates/prism-math" }
 prism-core = { path = "crates/prism-core" }
 prism-props = { path = "crates/prism-props" }
+prism-geom = { path = "crates/prism-geom" }
+prism-mesh = { path = "crates/prism-mesh" }
+prism-eval = { path = "crates/prism-eval" }
 prism-text = { path = "crates/prism-text" }
 prism-render = { path = "crates/prism-render" }
 prism-ui = { path = "crates/prism-ui" }

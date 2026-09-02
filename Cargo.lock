@@ -1284,8 +1284,35 @@ name = "prism-core"
 version = "0.1.0"
 
 [[package]]
+name = "prism-eval"
+version = "0.1.0"
+dependencies = [
+ "prism-core",
+ "prism-geom",
+ "prism-math",
+ "prism-mesh",
+]
+
+[[package]]
+name = "prism-geom"
+version = "0.1.0"
+dependencies = [
+ "prism-core",
+ "prism-math",
+]
+
+[[package]]
 name = "prism-math"
 version = "0.1.0"
+
+[[package]]
+name = "prism-mesh"
+version = "0.1.0"
+dependencies = [
+ "prism-core",
+ "prism-geom",
+ "prism-math",
+]
 
 [[package]]
 name = "prism-props"

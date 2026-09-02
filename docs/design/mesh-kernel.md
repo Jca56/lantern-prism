@@ -214,3 +214,34 @@ start as careful f64 and can become exact without API change.
 Subdivision surfaces, booleans, remeshing, sculpt layers, multiresolution,
 shape keys, skin weights. Each is an attribute layer or a compound op away and
 none of them changes the tables above.
+
+---
+
+## 10. Implementation notes (Phase 3, 2026-09-01)
+
+- Topology is typed columns, data is attribute layers, both over one slot
+  allocator per domain (D020). Built-in layers sit at fixed indices
+  (`tables::V_POSITION`, `E_SHARP`, `F_SMOOTH`, …).
+- `Slots<T>` keeps generations, a live bitset and an intrusive free list, all
+  as `ChunkedVec`s, so the allocator is persistent too.
+- Required link columns hold an `invalid()` sentinel (`index = u32::MAX`)
+  until an euler op fills them; `validate()` rejects it on live elements.
+- `split_face_make_edge` reuses an existing edge between the two corners so
+  the "no duplicate edges" invariant always holds; `join_face_kill_edge`
+  refuses faces that share anything beyond the one edge and its two vertices.
+- `join_edge_kill_vert` refuses to take a triangle below three corners.
+- `weld_verts` merges edges that would become duplicates, drops the corner of
+  a degenerate edge, and kills faces that fall under three corners; a face
+  containing both vertices without the edge between them is refused (it
+  would pinch).
+- `join_faces` walks the region's directed boundary edges into one ring;
+  holes, pinches or several loops are refused and the mesh is untouched.
+- `Mesh::paranoid = true` validates after every kernel op. The fuzzer
+  (`fuzz::run`) does 12 seeds × 400 ops per test run with validation each
+  step, and the ignored `one_million_ops` gate does 20 × 50 000 in release,
+  validating every 25 steps (about 30 s).
+- `prism-eval::evaluate` builds corner-based buffers (positions, split
+  normals, UVs, triangles) plus compact vertices and edge indices for
+  wireframe, with origin maps back to loops, faces, vertices and edges.
+  Smooth normals average the fan reachable without crossing a sharp or
+  non-manifold edge, weighted by corner angle.

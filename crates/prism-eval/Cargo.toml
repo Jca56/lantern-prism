@@ -1,0 +1,15 @@
+[package]
+name = "prism-eval"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+prism-math.workspace = true
+prism-core.workspace = true
+prism-geom.workspace = true
+prism-mesh.workspace = true

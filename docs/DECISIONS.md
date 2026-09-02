@@ -230,6 +230,28 @@ coverage-gamma thickening in the shader; light text is untouched.
 linear light is correct for shapes; the atlas trick lets one pipeline draw
 text and emoji with a single `texel × tint`.
 
+## D020 — Kernel storage: typed topology columns beside attribute layers
+**Status:** Proposed (implemented in Phase 3)
+**Refines:** D003.
+**Decision:** Topology links (`vert.edge`, `edge.v`, `edge.disk`, `loop.next`,
+`loop.radial_next`, `face.loop`, …) are **typed `ChunkedVec` columns** on the
+four tables, not entries in the named attribute set. User data (position,
+selection, UVs, creases, anything a tool adds) lives in the attribute set of
+the same table. All columns share one persistent slot allocator per domain
+(`Slots`: generation, live bitset, intrusive free list), so both kinds of
+column clone in O(chunks), edit copy-on-write, and undo the same way — which
+is the property D003 actually cares about.
+Three kernel-level operations exist beside the euler set: `weld_verts`
+(vertex splice, which the euler operators cannot express), `join_faces`
+(replace a region by one n-gon over its boundary loop — the primitive every
+dissolve reduces to), and the primitives' `add_face`. Everything else is
+composed. `Mesh::paranoid` runs `validate()` after every kernel op; the fuzz
+harness and the tests turn it on, debug builds do not (it is O(mesh) per op).
+**Why:** Euler operators written against typed columns read like the
+literature; against generic layers every link access is a `match`. Speed is
+a side benefit. The doc-level guarantee (one storage mechanism, persistent,
+undoable) is unchanged.
+
 ---
 
 ## Open questions

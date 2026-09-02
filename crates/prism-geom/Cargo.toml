@@ -1,0 +1,14 @@
+[package]
+name = "prism-geom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Pure geometry for Prism: normals, triangulation, predicates, intersections, BVH, kd-tree."
+
+[lints]
+workspace = true
+
+[dependencies]
+prism-math.workspace = true
+prism-core.workspace = true
